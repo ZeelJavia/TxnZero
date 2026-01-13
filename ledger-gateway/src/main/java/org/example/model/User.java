@@ -25,6 +25,9 @@ public class User {
     @Column(name = "full_name")
     private String fullName;
 
+    @Column(name = "vpa", unique = true, nullable = false)
+    private String vpa;  // Virtual Payment Address (e.g., "alice@l0")
+
     @Column(name = "kyc_status")
     private String kycStatus; // 'PENDING', 'VERIFIED'
 
