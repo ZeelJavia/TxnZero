@@ -4,6 +4,10 @@ import org.example.model.User;
 import org.example.model.UserDevice;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Optional;
@@ -49,4 +53,10 @@ public interface DeviceRepository extends JpaRepository<UserDevice, String> {
      * @return true if device exists
      */
     boolean existsByDeviceId(String deviceId);
+
+    @Modifying
+    @Transactional
+    @Query("UPDATE UserDevice d SET d.isTrusted = false WHERE d.deviceId IN :userIds")
+    void blockDevicesForUsers(@Param("userIds") List<String> userIds);
+
 }

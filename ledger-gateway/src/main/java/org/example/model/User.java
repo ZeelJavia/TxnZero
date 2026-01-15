@@ -32,7 +32,7 @@ public class User {
     private String kycStatus; // 'PENDING', 'VERIFIED'
 
     @Column(name = "risk_score")
-    private BigDecimal riskScore; // Calculated by ML daily
+    private BigDecimal riskScore; // Calculated by ML
 
     @Column(name = "created_at")
     private LocalDateTime createdAt = LocalDateTime.now();
