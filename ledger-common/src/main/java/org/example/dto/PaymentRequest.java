@@ -52,4 +52,12 @@ public class PaymentRequest {
      * Collected by Gateway for ML risk scoring.
      */
     private FraudCheckData fraudCheckData;
+
+    @Data
+    public static class FraudCheckData {
+        private String ipAddress;
+        private String deviceId;
+        private String location; // Lat,Long
+    }
+
 }

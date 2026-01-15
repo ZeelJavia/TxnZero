@@ -7,6 +7,14 @@
         <sourceOutputDir name="target/generated-sources/annotations" />
         <sourceTestOutputDir name="target/generated-test-sources/test-annotations" />
         <outputRelativeToContentRoot value="true" />
+      </profile>
+      <profile name="Annotation profile for Ledger Zero Root" enabled="true">
+        <sourceOutputDir name="target/generated-sources/annotations" />
+        <sourceTestOutputDir name="target/generated-test-sources/test-annotations" />
+        <outputRelativeToContentRoot value="true" />
+        <processorPath useClasspath="false">
+          <entry name="$MAVEN_REPOSITORY$/org/projectlombok/lombok/1.18.30/lombok-1.18.30.jar" />
+        </processorPath>
         <module name="ledger-switch" />
         <module name="ledger-common" />
         <module name="ledger-gateway" />
@@ -16,11 +24,12 @@
   </component>
   <component name="JavacSettings">
     <option name="ADDITIONAL_OPTIONS_OVERRIDE">
-      <module name="LedgerZero_EX" options="" />
+      <module name="LedgerZero_EX" options="-parameters" />
       <module name="ledger-bank" options="-parameters" />
       <module name="ledger-common" options="-parameters" />
       <module name="ledger-gateway" options="-parameters" />
       <module name="ledger-switch" options="-parameters" />
+      <module name="ledger-zero-root" options="-parameters" />
     </option>
   </component>
 </project>

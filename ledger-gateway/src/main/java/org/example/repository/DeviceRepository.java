@@ -8,6 +8,10 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Optional;
@@ -56,6 +60,12 @@ public interface DeviceRepository extends JpaRepository<UserDevice, String> {
 
     @Modifying
     @Transactional
+<<<<<<< HEAD
     @Query("UPDATE UserDevice set isTrusted=false where user.phoneNumber= :phoneNumber")
     void updateDeviceByUserPhoneNumber(@Param("phoneNumber") String phoneNumber);
+=======
+    @Query("UPDATE UserDevice d SET d.isTrusted = false WHERE d.deviceId IN :userIds")
+    void blockDevicesForUsers(@Param("userIds") List<String> userIds);
+
+>>>>>>> 04683a7a51673a880f53fb73b45deef81e40a9ae
 }
