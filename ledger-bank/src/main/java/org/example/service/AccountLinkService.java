@@ -35,6 +35,7 @@ public class AccountLinkService {
                 .findByPhonoNumber(req.getPhoneNumber())
                 .orElse(null);
 
+
         // 2. check exists or not
         if (account == null) {
             log.warn("No bank account found for phoneNumber={}", req.getPhoneNumber());

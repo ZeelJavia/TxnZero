@@ -12,14 +12,17 @@ import org.neo4j.driver.Driver;
 import org.neo4j.driver.Result;
 import org.neo4j.driver.Session;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value; // ✅ Added
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.Resource; // ✅ CRITICAL IMPORT
 import org.springframework.stereotype.Service;
-import org.springframework.web.client.RestTemplate; // ✅ Added
+import org.springframework.web.client.RestTemplate;
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisPool;
 
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
+
+import java.io.InputStream;
 import java.nio.FloatBuffer;
 import java.nio.LongBuffer;
 import java.time.LocalDateTime;
@@ -41,13 +44,16 @@ public class FraudDetectionService {
     @Autowired
     private Driver neo4jDriver;
 
-    // ✅ Inject RestTemplate for Microservice Communication
     @Autowired
     private RestTemplate restTemplate;
 
-    // ✅ Inject Gateway URL (Default to localhost:8080 if not in properties)
     @Value("${gateway.service.url:http://localhost:8080}")
     private String gatewayUrl;
+
+    // ✅ INJECT THE MODEL FILE SAFELY USING SPRING
+    // This finds the file in 'target/classes' or inside the JAR automatically.
+    @Value("classpath:fraud_model_v2.onnx")
+    private Resource modelResource;
 
     private JedisPool redisPool;
     private OrtEnvironment env;
@@ -62,17 +68,41 @@ public class FraudDetectionService {
     @PostConstruct
     public void init() {
         try {
-            // 1. Initialize Redis Pool
-            this.redisPool = new JedisPool("localhost", 6380);
+            log.info("🔍 STARTING AI INITIALIZATION...");
 
-            // 2. Initialize AI Brain (ONNX)
+            // 1. Initialize Redis Pool
+            this.redisPool = new JedisPool("localhost", 6379);
+
+            // 2. Initialize AI Environment
             this.env = OrtEnvironment.getEnvironment();
-            // Ensure path is correct relative to where you run the jar/IDE
-            this.session = env.createSession("../moneyLaundering/fraud_model_v2.onnx", new OrtSession.SessionOptions());
+
+            // ✅ 3. VERIFY FILE EXISTENCE
+            if (!modelResource.exists()) {
+                log.error("❌ FILE MISSING: Spring could not find 'fraud_model_v2.onnx' in the classpath.");
+                log.error("👉 Please run 'mvn clean compile' to force the file copy.");
+                throw new RuntimeException("Model file missing from build path");
+            }
+
+            // ✅ 4. LOAD MODEL (Using Spring Resource Stream)
+            byte[] modelBytes;
+            try (InputStream is = modelResource.getInputStream()) {
+                modelBytes = is.readAllBytes();
+            }
+
+            // Safety Check: Detect Maven Corruption
+            log.info("✅ Found Model File. Size: {} bytes", modelBytes.length);
+            if (modelBytes.length < 1000) {
+                throw new RuntimeException("❌ FILE CORRUPTED: Model is too small. Maven filtering might be damaging the binary file.");
+            }
+
+            // 5. Create Session
+            this.session = env.createSession(modelBytes, new OrtSession.SessionOptions());
+
             log.info("🚀 AI Brain & Redis Loaded Successfully");
+
         } catch (Exception e) {
-            log.error("❌ Critical: Failed to initialize AI Engine", e);
-            throw new RuntimeException(e);
+            log.error("❌ Failed to initialize AI Engine", e);
+            throw new RuntimeException(e); // This stops the app start if AI fails
         }
     }
 

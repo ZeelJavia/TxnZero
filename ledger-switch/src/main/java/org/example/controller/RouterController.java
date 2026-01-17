@@ -12,11 +12,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.client.RestTemplate; // ✅ Added
+
+import java.util.concurrent.CompletableFuture; // ✅ Added
 
 /**
  * REST Controller for Switch routing operations.
- * Receives payment requests from Gateway and routes to appropriate banks.
- * 
  * Port: 9090
  */
 @RestController
@@ -28,28 +29,17 @@ public class RouterController {
     private final RouterService routerService;
     private final AccountLinkService accountLinkService;
 
-    public RouterController(RouterService routerService, AccountLinkService accountLinkService) {
+    // ✅ 1. Inject RestTemplate
+    private final RestTemplate restTemplate;
+
+    public RouterController(RouterService routerService,
+                            AccountLinkService accountLinkService,
+                            RestTemplate restTemplate) {
         this.routerService = routerService;
         this.accountLinkService = accountLinkService;
+        this.restTemplate = restTemplate;
     }
 
-    /**
-     * Main transfer endpoint.
-     * Called by Gateway's SwitchClient.
-     *
-     * POST /api/switch/transfer
-     *
-     * Flow:
-     * 1. Receive PaymentRequest from Gateway
-     * 2. Lookup VPA → Bank mapping
-     * 3. Run fraud detection
-     * 4. If safe, route to payer's bank for debit
-     * 5. Then route to payee's bank for credit
-     * 6. Return final status
-     *
-     * @param request Payment request containing txnId, amount, VPAs, fraud data
-     * @return TransactionResponse with final status and risk score
-     */
     @PostMapping("/transfer")
     public ResponseEntity<TransactionResponse> transfer(@RequestBody PaymentRequest request) {
 
@@ -82,22 +72,38 @@ public class RouterController {
         // Delegate to RouterService
         TransactionResponse response = routerService.routeTransaction(request);
 
+        // ✅ 2. TRIGGER GRAPH SYNC (Only on Success)
+        // We do this HERE to ensure DB transaction is committed before Python reads it.
+        if (response.getStatus() == TransactionStatus.SUCCESS) {
+            triggerGraphSync();
+        }
+
         log.info("Transfer complete: txnId={}, status={}, riskScore={}",
                 response.getTxnId(), response.getStatus(), response.getRiskScore());
 
         return ResponseEntity.ok(response);
     }
 
-    /**
-     * VPA lookup endpoint.
-     * Returns bank handle for a given VPA.
-     *
-     * GET /api/switch/vpa/{vpa}/bank
-     */
+    // ✅ 3. Helper Method for Fire-and-Forget Call
+    private void triggerGraphSync() {
+        CompletableFuture.runAsync(() -> {
+            try {
+                // If Switch is Local & Python is Docker -> "http://localhost:8000"
+                // If both in Docker -> "http://sync-engine:8000"
+                String url = "http://localhost:8000/sync/transactions";
+                restTemplate.postForLocation(url, null);
+                log.info("🚀 Triggered Graph Sync for successful transaction");
+            } catch (Exception e) {
+                log.warn("⚠️ Failed to trigger Graph Sync: {}", e.getMessage());
+            }
+        });
+    }
+
+    // ... [Rest of the Controller remains unchanged] ...
+
     @GetMapping("/vpa/{vpa}/bank")
     public ResponseEntity<String> lookupVpaBank(@PathVariable String vpa) {
         log.info("VPA lookup request: {}", vpa);
-
         String bankHandle = routerService.lookupBankForVpa(vpa);
         if (bankHandle == null) {
             return ResponseEntity.notFound().build();
@@ -105,35 +111,21 @@ public class RouterController {
         return ResponseEntity.ok(bankHandle);
     }
 
-
-    /**
-     * get available bank list
-     *
-     */
     @GetMapping("/banks")
     public Response getBanks() {
         return accountLinkService.getAllBanks();
     }
 
-    /**
-     * get exits bank
-     */
     @PostMapping("/account-exits")
     public Response getExitsBank(@RequestBody BankClientReq req){
         return accountLinkService.getAccount(req);
     }
 
-    /**
-     * generate vpa
-     */
     @PostMapping("/vpa-generate")
     public Response generateVpaBank(@RequestBody BankClientReq req){
         return accountLinkService.generateVPA(req);
     }
 
-    /**
-     * Health check endpoint for Switch service.
-     */
     @GetMapping("/health")
     public ResponseEntity<String> health() {
         return ResponseEntity.ok("Switch is UP");

@@ -36,11 +36,11 @@ public class BankClient {
     private final VPARegistryRepository  vpaRegistryRepository;
 
     public BankClient(RestTemplate restTemplate,
-                      @Value("${app.urls.bank.axis}") String axisBankUrl,
-                      @Value("${app.urls.bank.sbi}") String sbiBankUrl,
-                      VPARegistryRepository  vpaRegistryRepository) {
+
         this.restTemplate = restTemplate;
-        this.axisBankUrl = axisBankUrl;
+        this.axisBankUrl = axisBankUrl;    @Value("${app.urls.bank.axis}") String axisBankUrl,
+        @Value("${app.urls.bank.sbi}") String sbiBankUrl,
+        VPARegistryRepository  vpaRegistryRepository) {
         this.sbiBankUrl = sbiBankUrl;
         this.vpaRegistryRepository = vpaRegistryRepository;
     }
