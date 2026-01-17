@@ -1,4 +1,4 @@
-package org.example.dataModel;
+package org.example.dto;
 
 import lombok.*;
 

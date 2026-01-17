@@ -1,9 +1,6 @@
 package org.example.controller;
 
-import org.example.dto.PaymentRequest;
-import org.example.dto.PhoneReq;
-import org.example.dto.Response;
-import org.example.dto.TransactionResponse;
+import org.example.dto.*;
 import org.example.enums.TransactionStatus;
 import org.example.model.BankAccount;
 import org.example.service.AccountLinkService;
@@ -180,6 +177,14 @@ public class CoreBankingController {
     @PostMapping("/create-account")
     public Response createAccount(@RequestBody BankAccount bankAccount) {
         return accountLinkService.createBankUser(bankAccount);
+    }
+
+    /**
+     * pin set
+     */
+    @PostMapping("/set-mpin")
+    public Response setMPin(@RequestBody PinBankReq req) {
+        return accountLinkService.setPinToAccount(req);
     }
 
     /**

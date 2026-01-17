@@ -1,8 +1,10 @@
 package org.example.controller;
 
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import org.example.dto.*;
 import org.example.service.imp.AccountLinkService;
+import org.example.utils.JwtUtil;
 import org.springframework.web.bind.annotation.*;
 
 
@@ -41,10 +43,17 @@ public class AccountLinkController {
      * @return Response
      */
     @PostMapping("/bank/vpa-generate")
-    public Response generateVPA(HttpServletRequest request, @RequestBody BankHandlerVerificationReq req){
-        return accountLinkService.checkOtpAndGenerateVPA(request, req);
+    public Response generateVPA(HttpServletRequest request, HttpServletResponse response, @RequestBody BankHandlerVerificationReq req){
+        return accountLinkService.checkOtpAndGenerateVPA(request,response, req);
     }
 
+    /**
+     * set mpin
+     */
+    @PostMapping("/bank/set-mpin")
+    public Response setMPin(HttpServletRequest request,@RequestBody PinBankReq bankReq){
+        return accountLinkService.setMpinToAccount(request, bankReq);
+    }
 
 
 }

@@ -5,7 +5,7 @@ import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.security.Keys;
-import org.example.dataModel.UserDeviceData;
+import org.example.dto.UserDeviceData;
 import com.fasterxml.jackson.core.type.TypeReference;
 
 import javax.crypto.SecretKey;
@@ -16,14 +16,27 @@ public class JwtUtil {
 
 
     //1. generate jwt token
-    public static String generateJWTToken(String SECRET_KEY,int exTime, Long userId, String phoneNumber,String fullName, List<UserDeviceData> devices) {
+    public static String generateJWTToken(String SECRET_KEY,int exTime, Long userId, String phoneNumber,String fullName, List<UserDeviceData> devices, String vpa) {
+        if(vpa.isEmpty()){
+            return Jwts.builder()
+                    .setSubject(String.valueOf(userId))
+                    .claim("phone", phoneNumber)
+                    .claim("devices", devices)
+                    .claim("fullName", fullName)
+                    .setIssuedAt(new Date())
+                    .setExpiration(new Date(System.currentTimeMillis() + (exTime * 1000L)))
+                    .signWith(Keys.hmacShaKeyFor(SECRET_KEY.getBytes()), SignatureAlgorithm.HS256)
+                    .compact();
+
+        }
         return Jwts.builder()
                 .setSubject(String.valueOf(userId))
                 .claim("phone", phoneNumber)
                 .claim("devices", devices)
                 .claim("fullName", fullName)
+                .claim("vpa", vpa)
                 .setIssuedAt(new Date())
-                .setExpiration(new Date(System.currentTimeMillis() + exTime))
+                .setExpiration(new Date(System.currentTimeMillis() + (exTime * 1000L)))
                 .signWith(Keys.hmacShaKeyFor(SECRET_KEY.getBytes()), SignatureAlgorithm.HS256)
                 .compact();
     }
@@ -80,6 +93,10 @@ public class JwtUtil {
                     new TypeReference<List<UserDeviceData>>() {}
             );
         });
+    }
+
+    public static String extractVpa(String token, String secretKey) {
+        return extractClaim(token, secretKey, claims -> claims.get("vpa", String.class));
     }
 
     private static boolean isTokenExpired(String token, String secretKey) {

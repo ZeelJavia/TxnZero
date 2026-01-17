@@ -2,7 +2,7 @@ package org.example.service.imp;
 
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.transaction.Transactional;
-import org.example.dataModel.UserDeviceData;
+import org.example.dto.UserDeviceData;
 import org.example.dto.*;
 import org.example.model.Enums;
 import org.example.model.TempUser;
@@ -72,7 +72,7 @@ public class AuthService implements IAuth {
 
         List<UserDevice> devices = deviceRepository.findByUser(user);
         List<UserDeviceData> userDeviceDatas = devices.stream().map(this::userDeviceToUserDeviceData).toList();
-        String jwtToken = JwtUtil.generateJWTToken(jwtKey, exTime, user.getUserId(), user.getPhoneNumber(), user.getFullName(), userDeviceDatas);
+        String jwtToken = JwtUtil.generateJWTToken(jwtKey, exTime, user.getUserId(), user.getPhoneNumber(), user.getFullName(), userDeviceDatas, "");
 
         //2. save into cookie
         CookieUtil.createJwtCookie(response, jwtToken, exTime);
@@ -178,7 +178,7 @@ public class AuthService implements IAuth {
         devices.add(userDeviceToUserDeviceData(userDevice));
 
         //6. create jwt token
-        String jwtToken = JwtUtil.generateJWTToken(jwtKey, exTime*1000, user.getUserId(), user.getPhoneNumber(), user.getFullName(), devices);
+        String jwtToken = JwtUtil.generateJWTToken(jwtKey, exTime*1000, user.getUserId(), user.getPhoneNumber(), user.getFullName(), devices, "");
 
         //7. saved into cookie
         CookieUtil.createJwtCookie(response, jwtToken, exTime);

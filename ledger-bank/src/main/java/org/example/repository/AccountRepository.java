@@ -50,6 +50,5 @@ public interface AccountRepository extends JpaRepository<BankAccount, String> {
            "WHERE a.accountNumber = :accountNumber AND a.frozenStatus = false")
     boolean isAccountActive(@Param("accountNumber") String accountNumber);
 
-
-    Optional<BankAccount> findByPhonoNumber(String phonoNumber);
+    Optional<BankAccount> findByPhoneNumber(String phoneNumber);
 }

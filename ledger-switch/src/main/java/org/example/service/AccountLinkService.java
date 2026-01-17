@@ -2,6 +2,7 @@ package org.example.service;
 
 import org.example.client.BankClient;
 import org.example.dto.BankClientReq;
+import org.example.dto.PinBankReq;
 import org.example.dto.Response;
 import org.springframework.stereotype.Service;
 
@@ -37,4 +38,7 @@ public class AccountLinkService {
     public Response generateVPA(BankClientReq req){
         return bankClient.generateVPA(req);
     }
+
+    //set pin
+    public Response setMpin(PinBankReq req){ return bankClient.setMPin(req); }
 }

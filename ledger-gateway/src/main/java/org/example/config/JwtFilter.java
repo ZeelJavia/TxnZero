@@ -8,7 +8,7 @@ import jakarta.servlet.ServletResponse;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import org.example.dataModel.UserDeviceData;
+import org.example.dto.UserDeviceData;
 import org.example.utils.JwtUtil;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -49,13 +49,14 @@ public class JwtFilter implements Filter {
             Long userId = JwtUtil.extractUserId(token, jwtKey);
             String phone = JwtUtil.extractPhoneNumber(token, jwtKey);
             String fullName = JwtUtil.extractFullName(token, jwtKey);
-            List<UserDeviceData> userDeviceData =
-                    JwtUtil.extractDevice(token, jwtKey);
+            List<UserDeviceData> userDeviceData = JwtUtil.extractDevice(token, jwtKey);
+            String vpa = JwtUtil.extractVpa(token, jwtKey);
 
             request.setAttribute("userId", userId);
             request.setAttribute("phoneNumber", phone);
             request.setAttribute("fullname", fullName);
             request.setAttribute("userDeviceData", userDeviceData);
+            request.setAttribute("vpa", vpa);
 
             chain.doFilter(request, response);
         } else {

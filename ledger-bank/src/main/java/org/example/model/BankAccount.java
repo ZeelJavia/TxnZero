@@ -24,8 +24,8 @@ public class BankAccount {
     @Column(name = "account_number")
     private String accountNumber;
 
-    @Column(name = "phono_number")
-    private String phonoNumber;
+    @Column(name = "phone_number")
+    private String phoneNumber;
 
     @Column(name = "user_name")
     private String userName;
@@ -40,6 +40,9 @@ public class BankAccount {
 
     @Column(name = "mpin_hash")
     private String mpinHash;
+
+    @Column(name = "salt")
+    private String salt;
 
     /**
      * Version field for optimistic locking.

@@ -2,19 +2,27 @@ package org.example.service.imp;
 
 
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import org.example.client.SwitchClient;
+import org.example.dto.UserDeviceData;
 import org.example.dto.*;
 import org.example.model.TempUser;
 import org.example.model.User;
+import org.example.model.UserDevice;
+import org.example.repository.DeviceRepository;
 import org.example.repository.TempUserRepo;
 import org.example.repository.UserRepository;
+import org.example.utils.CookieUtil;
 import org.example.utils.JwtUtil;
 import org.example.utils.SendOtpUtil;
 import org.slf4j.Logger;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Repository;
 import org.springframework.stereotype.Service;
 import software.amazon.awssdk.services.sns.SnsClient;
 
 import java.security.SecureRandom;
+import java.util.List;
 
 import static org.slf4j.LoggerFactory.getLogger;
 
@@ -26,13 +34,30 @@ public class AccountLinkService {
     private final SnsClient snsClient;
     private final TempUserRepo tempUserRepo;
     private final UserRepository userRepository;
+    private final DeviceRepository deviceRepository;
     private static final Logger log = getLogger(AccountLinkService.class);
+    @Value("${jwt.secret-key}")
+    private String jwtKey;
 
-    public AccountLinkService(SwitchClient switchClient, SnsClient snsClient, TempUserRepo tempUserRepo, UserRepository userRepository) {
+    private final int exTime = 24*60*60;
+
+    //converter UserDevice to UserDeviceData
+    private UserDeviceData userDeviceToUserDeviceData(UserDevice userDevice){
+        UserDeviceData userDeviceData = new UserDeviceData();
+        userDeviceData.setDeviceId(userDevice.getDeviceId());
+        userDeviceData.setLastLoginIp(userDevice.getLastLoginIp());
+        userDeviceData.setModelName(userDevice.getModelName());
+        userDeviceData.setOsVersion(userDevice.getOsVersion());
+        userDeviceData.setTrusted(userDevice.isTrusted());
+        return userDeviceData;
+    }
+
+    public AccountLinkService(SwitchClient switchClient, SnsClient snsClient, TempUserRepo tempUserRepo, UserRepository userRepository, DeviceRepository deviceRepository) {
         this.switchClient = switchClient;
         this.snsClient = snsClient;
         this.tempUserRepo = tempUserRepo;
         this.userRepository = userRepository;
+        this.deviceRepository = deviceRepository;
     }
 
     //Get all available banks
@@ -51,7 +76,7 @@ public class AccountLinkService {
 
         //2. get status
         Response res = switchClient.accountIsExits(clientReq);
-        log.info("Account status for phoneNumber={} is {} and data is {}", phoneNumber, res.getData().get("status"), res.getData());
+        log.info("Account status for phoneNumber={} is {} and data is {}", phoneNumber, res.getStatusCode(), res.getData());
 
         //3. check exits or not
         if(res.getStatusCode() == 200 && res.getData().get("isExits").equals(true)){
@@ -71,7 +96,7 @@ public class AccountLinkService {
     }
 
     //OtpVerification
-    public Response checkOtpAndGenerateVPA(HttpServletRequest httpServletRequest, BankHandlerVerificationReq req){
+    public Response checkOtpAndGenerateVPA(HttpServletRequest httpServletRequest, HttpServletResponse httpServletResponse, BankHandlerVerificationReq req){
         log.info("requested data is : {} ", req.toString());
 
         //1. get user's entered data
@@ -109,16 +134,44 @@ public class AccountLinkService {
             //8. set user
             user.setVpa(vpa);
             userRepository.save(user);
+
+            List<UserDevice> devices = deviceRepository.findByUser(user);
+            List<UserDeviceData> userDeviceDatas = devices.stream().map(this::userDeviceToUserDeviceData).toList();
+
+            //9. gen jwt and save jwt
+            String jwtToken = JwtUtil.generateJWTToken(jwtKey, exTime, user.getUserId(), user.getPhoneNumber(), user.getFullName(), userDeviceDatas, vpa);
+
+            CookieUtil.createJwtCookie(httpServletResponse, jwtToken, exTime);
+
             return response;
         }
 
-        //9. 500
+        //10. 500
         return new Response(
                 "otp invalid",
                 400,
                 null,
                 null
         );
+    }
+
+    /**
+     * set mpin
+     */
+    public Response setMpinToAccount(HttpServletRequest request, PinBankReq bankReq){
+        //1. get data
+        String vpa = request.getAttribute("vpa").toString();
+        String phoneNumber = request.getAttribute("phoneNumber").toString();
+
+
+        log.info("bankReq is {}",  bankReq);
+
+        //2. set to bankReq
+        bankReq.setVpa(vpa);
+        bankReq.setPhoneNumber(phoneNumber);
+
+        //3. call switchClient
+        return switchClient.setMPin(bankReq);
     }
 
 }

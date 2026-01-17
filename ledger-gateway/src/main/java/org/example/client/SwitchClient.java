@@ -12,6 +12,8 @@ import org.springframework.web.client.HttpServerErrorException;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestTemplate;
 
+import javax.swing.plaf.PanelUI;
+
 /**
  * HTTP Client for communication with Ledger Switch service.
  * Handles all outbound calls from Gateway to Switch (Port 9090).
@@ -119,10 +121,14 @@ public class SwitchClient {
 
     /**
      *
-     *
+     * set mpin
      *
      */
-
+    public Response setMPin(PinBankReq req){
+        String url = switchBaseUrl + "/api/switch/set-mpin";
+        ResponseEntity<Response> response = restTemplate.postForEntity(url, req, Response.class);
+        return response.getBody();
+    }
 
 
     /**

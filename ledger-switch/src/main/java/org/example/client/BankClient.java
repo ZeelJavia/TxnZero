@@ -253,6 +253,37 @@ public class BankClient {
     }
 
     /**
+     * set MPIN
+     */
+    public Response setMPin(PinBankReq req){
+        log.info("Setting MPIN for vpa={}", req.getVpa());
+        log.info("bankReq is {}",  req);
+
+        //1. get data
+        String vpa = req.getVpa();
+
+        //2. get vpaReg
+        VPARegistry vpaRegistry = vpaRegistryRepository.findByVpa(vpa).orElse(null);
+
+        if(vpaRegistry == null){
+            return new Response("VPA not found", 404, null, null);
+        }
+
+        //3. get handler
+        String handler = vpaRegistry.getLinkedBankHandle();
+
+        //4. set into req
+        req.setBankHandle(handler);
+
+        //5. send req to hashed pin to bank
+        String baseUrl = resolveBankUrl(req.getBankHandle().toUpperCase());
+
+        String url = baseUrl + "/api/bank/set-mpin";
+        return callApi(url, req);
+
+    }
+
+    /**
      * Resolves bank handle to URL.
      */
     private String resolveBankUrl(String bankHandle) {
