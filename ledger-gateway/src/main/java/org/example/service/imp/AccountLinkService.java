@@ -5,7 +5,9 @@ import jakarta.servlet.http.HttpServletRequest;
 import org.example.client.SwitchClient;
 import org.example.dto.*;
 import org.example.model.TempUser;
+import org.example.model.User;
 import org.example.repository.TempUserRepo;
+import org.example.repository.UserRepository;
 import org.example.utils.JwtUtil;
 import org.example.utils.SendOtpUtil;
 import org.slf4j.Logger;
@@ -23,12 +25,14 @@ public class AccountLinkService {
     private final SecureRandom secureRandom = new SecureRandom();
     private final SnsClient snsClient;
     private final TempUserRepo tempUserRepo;
+    private final UserRepository userRepository;
     private static final Logger log = getLogger(AccountLinkService.class);
 
-    public AccountLinkService(SwitchClient switchClient, SnsClient snsClient, TempUserRepo tempUserRepo) {
+    public AccountLinkService(SwitchClient switchClient, SnsClient snsClient, TempUserRepo tempUserRepo, UserRepository userRepository) {
         this.switchClient = switchClient;
         this.snsClient = snsClient;
         this.tempUserRepo = tempUserRepo;
+        this.userRepository = userRepository;
     }
 
     //Get all available banks
@@ -80,18 +84,35 @@ public class AccountLinkService {
 
         //3. verify via otp
         if(tempUser != null && tempUser.getOtp().equals(otp)){
-            //remove user from tempUser
+            //4. remove user from tempUser
             tempUserRepo.delete(tempUser);
 
-            //send req to switch proceed with generate vpa and save
+            //5. send req to switch proceed with generate vpa and save
             BankClientReq clientReq = new BankClientReq();
             clientReq.setBankHandle(req.getBankHandle());
             clientReq.setPhoneNumber(phoneNumber);
 
-            return switchClient.VPAGenerate(clientReq);
+            Response response = switchClient.VPAGenerate(clientReq);
+            log.info("response from switch is : {} ", response.toString());
+
+            //6. get vpa of user
+            String vpa = response.getData().get("vpa").toString();
+            log.info("vpa of user is : {} ", vpa);
+
+            //7. store into user
+            User user = userRepository.findByPhoneNumber(phoneNumber).orElse(null);
+
+            if(user == null){
+                return new Response("User not found", 400, null, null);
+            }
+
+            //8. set user
+            user.setVpa(vpa);
+            userRepository.save(user);
+            return response;
         }
 
-        //4. 500
+        //9. 500
         return new Response(
                 "otp invalid",
                 400,
