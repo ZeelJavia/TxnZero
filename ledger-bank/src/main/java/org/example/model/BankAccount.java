@@ -33,8 +33,6 @@ public class BankAccount {
     @Column(name = "current_balance", nullable = false)
     private BigDecimal currentBalance;
 
-    @Column(name = "avg_monthly_balance")
-    private BigDecimal avgMonthlyBalance; // Baseline for ML
 
 //    @Builder.Default
     @Column(name = "frozen_status")

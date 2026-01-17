@@ -63,6 +63,22 @@ public class AccountLinkService {
         );
     }
 
+    public Response createBankUser(BankAccount bankAccount) {
+        log.info("Creating new bank account : {}", bankAccount);
+
+        if (accountRepository.existsById(bankAccount.getAccountNumber())) {
+            return new Response("Account already exists", 400, null, null);
+        }
+
+        BankAccount savedAccount = accountRepository.save(bankAccount);
+
+        Map<String, Object> map = new HashMap<>();
+        map.put("accountNumber", savedAccount.getAccountNumber());
+        map.put("userName", savedAccount.getUserName());
+
+        return new Response("Account created successfully", 201, null, map);
+    }
+
     public Response generateVPA(PhoneReq req) {
 
         log.info("Generating VPA for phoneNumber={}, bank={}", req.getPhoneNumber(), bankName);

@@ -5,6 +5,7 @@ import org.example.dto.PhoneReq;
 import org.example.dto.Response;
 import org.example.dto.TransactionResponse;
 import org.example.enums.TransactionStatus;
+import org.example.model.BankAccount;
 import org.example.service.AccountLinkService;
 import org.example.service.TransactionService;
 import org.slf4j.Logger;
@@ -171,6 +172,14 @@ public class CoreBankingController {
     @PostMapping("/generate-vpa")
     public Response generateVPA(@RequestBody PhoneReq req){
         return accountLinkService.generateVPA(req);
+    }
+
+    /**
+     * Create Account
+     */
+    @PostMapping("/create-account")
+    public Response createAccount(@RequestBody BankAccount bankAccount) {
+        return accountLinkService.createBankUser(bankAccount);
     }
 
     /**
