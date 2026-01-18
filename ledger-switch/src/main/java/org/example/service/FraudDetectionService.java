@@ -160,28 +160,98 @@ public class FraudDetectionService {
     private double runGraphAI(String userId, String targetUserId) {
         try (Jedis redis = redisPool.getResource()) {
 
-            float[] features = fetchFeaturesFromRedis(redis, userId);
-            List<Long> edgeList = fetchSubgraphFromNeo4j(userId);
+            // 1. Fetch Raw Edges from Neo4j (Global IDs, e.g., 5973, 1042)
+            List<Long> rawEdges = fetchSubgraphFromNeo4j(userId);
 
-            // 🚀 Ghost Edge Patching (In-Memory)
-            long sourceNode = getNeo4jNodeId(userId);
-            long targetNode = getNeo4jNodeId(targetUserId);
+            // 2. Add the "Ghost Edge" (Current Transaction)
+            long sourceNodeId = getNeo4jNodeId(userId);
+            long targetNodeId = getNeo4jNodeId(targetUserId);
 
-            edgeList.add(sourceNode);
-            edgeList.add(targetNode);
-            edgeList.add(targetNode);
-            edgeList.add(sourceNode);
+            rawEdges.add(sourceNodeId);
+            rawEdges.add(targetNodeId);
+            rawEdges.add(targetNodeId); // Undirected
+            rawEdges.add(sourceNodeId);
 
-            long[] edgeIndex = edgeList.stream().mapToLong(l -> l).toArray();
+            // =================================================================
+            // 3. REMAPPING LOGIC (Global IDs -> Local Indices)
+            // =================================================================
 
-            return runInference(features, edgeIndex);
+            // Map<GlobalID, LocalIndex>
+            Map<Long, Integer> nodeMapping = new HashMap<>();
+            List<Long> uniqueNodes = new ArrayList<>();
+
+            // Rule: Source Node (Payer) MUST be Index 0
+            nodeMapping.put(sourceNodeId, 0);
+            uniqueNodes.add(sourceNodeId);
+
+            int localIndexCounter = 1;
+            List<Integer> remappedEdgeIndex = new ArrayList<>();
+
+            for (Long globalId : rawEdges) {
+                if (!nodeMapping.containsKey(globalId)) {
+                    nodeMapping.put(globalId, localIndexCounter++);
+                    uniqueNodes.add(globalId);
+                }
+                remappedEdgeIndex.add(nodeMapping.get(globalId));
+            }
+
+            // 4. Build Feature Matrix (x)
+            int numNodes = uniqueNodes.size();
+            float[] flattenFeatures = new float[numNodes * 2];
+
+            for (int i = 0; i < numNodes; i++) {
+                if (i == 0) {
+                    // Source User: Fetch Real Features
+                    float[] userFeatures = fetchFeaturesFromRedis(redis, userId);
+                    flattenFeatures[0] = userFeatures[0];
+                    flattenFeatures[1] = userFeatures[1];
+                } else {
+                    // Neighbors: Dummy Features [0,0] (Optimization)
+                    flattenFeatures[i * 2] = 0.0f;
+                    flattenFeatures[i * 2 + 1] = 0.0f;
+                }
+            }
+
+            // 5. Run Inference
+            double riskScore = runInference(flattenFeatures, numNodes, remappedEdgeIndex);
+
+            // ✅ SUCCESS MESSAGE
+            log.info("✅ AI Inference Successful. Risk Score: {}", String.format("%.4f", riskScore));
+
+            return riskScore;
 
         } catch (Exception e) {
             log.error("⚠️ AI Engine Failure (Fail-Open): {}", e.getMessage());
+            e.printStackTrace();
             return 0.0;
         }
     }
 
+    private double runInference(float[] flattenFeatures, int numNodes, List<Integer> remappedEdgeIndex) throws Exception {
+
+        // Create Tensors
+        OnnxTensor x = OnnxTensor.createTensor(env, FloatBuffer.wrap(flattenFeatures), new long[]{numNodes, 2});
+
+        int numEdges = remappedEdgeIndex.size() / 2;
+        long[] srcs = new long[numEdges];
+        long[] dsts = new long[numEdges];
+
+        for (int i = 0; i < numEdges; i++) {
+            srcs[i] = remappedEdgeIndex.get(2 * i);
+            dsts[i] = remappedEdgeIndex.get(2 * i + 1);
+        }
+
+        long[] combined = LongStream.concat(LongStream.of(srcs), LongStream.of(dsts)).toArray();
+        OnnxTensor edges = OnnxTensor.createTensor(env, LongBuffer.wrap(combined), new long[]{2, numEdges});
+
+        var inputs = Map.of("x", x, "edge_index", edges);
+
+        // Run Session
+        try (var results = session.run(inputs)) {
+            float[][] output = (float[][]) results.get(0).getValue();
+            return output[0][1]; // Probability of Fraud for Node 0
+        }
+    }
     // --- 🛡️ AUTOMATED KILL SWITCH (Mule Ring Takedown) ---
     public void blockMuleRing(String sourceUserId, String targetUserId) {
         log.warn("🚨 FRAUD CONFIRMED: Initiating Mule Ring Takedown for {} and {}", sourceUserId, targetUserId);
@@ -266,28 +336,6 @@ public class FraudDetectionService {
         }
     }
 
-    private double runInference(float[] features, long[] edgeIndex) throws Exception {
-        OnnxTensor x = OnnxTensor.createTensor(env, FloatBuffer.wrap(features), new long[]{1, 2});
-
-        int numEdges = edgeIndex.length / 2;
-        long[] srcs = new long[numEdges];
-        long[] dsts = new long[numEdges];
-
-        for (int i = 0; i < numEdges; i++) {
-            srcs[i] = edgeIndex[2 * i];
-            dsts[i] = edgeIndex[2 * i + 1];
-        }
-
-        long[] combined = LongStream.concat(LongStream.of(srcs), LongStream.of(dsts)).toArray();
-        OnnxTensor edges = OnnxTensor.createTensor(env, LongBuffer.wrap(combined), new long[]{2, numEdges});
-
-        var inputs = Map.of("x", x, "edge_index", edges);
-
-        try (var results = session.run(inputs)) {
-            float[][] output = (float[][]) results.get(0).getValue();
-            return output[0][1];
-        }
-    }
 
     public boolean isEntityBlocked(String entityValue) {
         if (entityValue == null) return false;

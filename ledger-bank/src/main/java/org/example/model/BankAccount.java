@@ -24,7 +24,11 @@ public class BankAccount {
     @Column(name = "account_number")
     private String accountNumber;
 
+<<<<<<< Updated upstream
     @Column(name = "phone_number")
+=======
+    @Column(name = "phono_number")
+>>>>>>> Stashed changes
     private String phoneNumber;
 
     @Column(name = "user_name")
