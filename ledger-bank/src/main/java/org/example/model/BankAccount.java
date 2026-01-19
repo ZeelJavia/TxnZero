@@ -24,11 +24,7 @@ public class BankAccount {
     @Column(name = "account_number")
     private String accountNumber;
 
-<<<<<<< Updated upstream
     @Column(name = "phone_number")
-=======
-    @Column(name = "phono_number")
->>>>>>> Stashed changes
     private String phoneNumber;
 
     @Column(name = "user_name")
@@ -40,6 +36,7 @@ public class BankAccount {
 
 //    @Builder.Default
     @Column(name = "frozen_status")
+    @Builder.Default  // ✅ Important for Lombok Builder
     private Boolean frozenStatus = false; // True if ML detects Money Laundering
 
     @Column(name = "mpin_hash")
