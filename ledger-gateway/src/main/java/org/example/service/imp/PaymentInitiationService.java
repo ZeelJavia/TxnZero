@@ -5,6 +5,7 @@ import org.example.dto.FraudCheckData;
 import org.example.dto.PaymentRequest;
 import org.example.dto.TransactionResponse;
 import org.example.enums.TransactionStatus;
+import org.example.model.Enums;
 import org.example.model.GatewayLog;
 import org.example.model.User;
 import org.example.model.UserDevice;
@@ -99,10 +100,12 @@ public class PaymentInitiationService {
                 sender.getUserId(), sender.getVpa(), sender.getFullName());
 
         // Step 2: Check KYC status
-        if (!"VERIFIED".equals(sender.getKycStatus())) {
+        if (!Enums.KycStatus.APPROVED.equals(sender.getKycStatus())) {
             log.warn("Sender KYC not verified: {}", sender.getUserId());
             return buildFailedResponse(txnId, "KYC verification required");
         }
+
+
 
         // Step 3: Validate device is trusted
         Optional<UserDevice> deviceOpt = deviceRepository.findByDeviceId(deviceId);
@@ -118,7 +121,7 @@ public class PaymentInitiationService {
         }
 
         // Step 5: Hash the MPIN using CryptoUtil
-        String mpinHash = CryptoUtil.hashMpin(plainMpin);
+        String mpinHash = plainMpin;
         log.debug("MPIN hashed for txnId: {}", txnId);
 
         // Step 6: Build FraudCheckData for ML

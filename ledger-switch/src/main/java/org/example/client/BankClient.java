@@ -227,17 +227,15 @@ public class BankClient {
             String vpa = res.getData().get("vpa").toString();
             String accountNumber = res.getData().get("accountNumber").toString();
 
-            //7. hashed account no
-            String hashedAccountNumber = CryptoUtil.hashMpin(accountNumber);
 
-            //8. save vpa
+            //7. save vpa
             VPARegistry registry = new VPARegistry();
             registry.setVpa(vpa);
             registry.setLinkedBankHandle(req.getBankHandle().toUpperCase());
-            registry.setAccountRef(hashedAccountNumber);
+            registry.setAccountRef(accountNumber);
             vpaRegistryRepository.save(registry);
 
-            //9. return res
+            //8. return res
             Map<String, Object> map = new HashMap<>();
             map.put("vpa", vpa);
             map.put("accountNumber", MaskingUtil.maskAccountNumber(accountNumber));

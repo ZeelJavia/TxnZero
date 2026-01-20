@@ -7,6 +7,7 @@ import org.example.model.AccountLedger;
 import org.example.model.BankAccount;
 import org.example.repository.AccountRepository;
 import org.example.repository.LedgerRepository;
+import org.example.utils.CryptoUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
@@ -17,13 +18,12 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 
 /**
- * Core banking transaction service.
- * Handles debit, credit, and reversal operations with proper locking.
- * 
- * Locking Strategy:
- * 1. PESSIMISTIC_WRITE lock on account row (via repository)
- * 2. @Version for optimistic locking as fallback
- * 3. SERIALIZABLE isolation for critical operations
+ * Core banking transaction service. Handles debit, credit, and reversal
+ * operations with proper locking.
+ *
+ * Locking Strategy: 1. PESSIMISTIC_WRITE lock on account row (via repository)
+ * 2. @Version for optimistic locking as fallback 3. SERIALIZABLE isolation for
+ * critical operations
  */
 @Service
 public class TransactionService {
@@ -34,16 +34,16 @@ public class TransactionService {
     private final LedgerRepository ledgerRepository;
 
     public TransactionService(AccountRepository accountRepository,
-                              LedgerRepository ledgerRepository) {
+            LedgerRepository ledgerRepository) {
         this.accountRepository = accountRepository;
         this.ledgerRepository = ledgerRepository;
     }
 
     /**
-     * Debits amount from payer's account.
-     * Called by Switch during payment processing.
+     * Debits amount from payer's account. Called by Switch during payment
+     * processing.
      *
-     * @param request   Payment request containing payer info
+     * @param request Payment request containing payer info
      * @param accountNumber Account to debit from
      * @param riskScore ML risk score for audit
      * @return TransactionResponse with status
@@ -51,7 +51,7 @@ public class TransactionService {
     @Transactional(isolation = Isolation.SERIALIZABLE)
     public TransactionResponse debit(PaymentRequest request, String accountNumber, BigDecimal riskScore) {
         String txnId = request.getTxnId();
-        log.info("Processing DEBIT: txnId={}, account={}, amount={}", 
+        log.info("Processing DEBIT: txnId={}, account={}, amount={}",
                 txnId, maskAccountNumber(accountNumber), request.getAmount());
 
         try {
@@ -71,21 +71,25 @@ public class TransactionService {
                 return buildResponse(txnId, TransactionStatus.FAILED, "Account not found");
             }
 
-            // Check frozen status
-            if (account.getFrozenStatus()) {
-                log.warn("Account frozen: {}", maskAccountNumber(accountNumber));
-                return buildResponse(txnId, TransactionStatus.FAILED, "Account is frozen");
+            if (Boolean.TRUE.equals(account.getFrozenStatus())) {
+                log.warn("❌ Transaction blocked: Account {} is frozen", account.getAccountNumber());
+                return TransactionResponse.builder()
+                        .status(TransactionStatus.FAILED)
+                        .message("Account is frozen")
+                        .build();
             }
 
+            String HashedMpin = CryptoUtil.hashMpinWithSalt(request.getMpinHash(), account.getSalt());
+//log.info("Hashed pin {}", request.getMpinHash());
             // Verify MPIN
-            if (!verifyMpin(account, request.getMpinHash())) {
+            if (!verifyMpin(account, HashedMpin)) {
                 log.warn("Invalid MPIN for account: {}", maskAccountNumber(accountNumber));
                 return buildResponse(txnId, TransactionStatus.FAILED, "Invalid PIN");
             }
 
             // Check sufficient balance
             if (account.getCurrentBalance().compareTo(request.getAmount()) < 0) {
-                log.warn("Insufficient balance: account={}, balance={}, required={}", 
+                log.warn("Insufficient balance: account={}, balance={}, required={}",
                         maskAccountNumber(accountNumber), account.getCurrentBalance(), request.getAmount());
                 return buildResponse(txnId, TransactionStatus.FAILED, "Insufficient balance");
             }
@@ -101,7 +105,7 @@ public class TransactionService {
                     account.getCurrentBalance(),
                     riskScore);
 
-            log.info("DEBIT successful: txnId={}, newBalance={}", 
+            log.info("DEBIT successful: txnId={}, newBalance={}",
                     txnId, account.getCurrentBalance());
 
             return buildResponse(txnId, TransactionStatus.SUCCESS, "Debit successful");
@@ -116,10 +120,10 @@ public class TransactionService {
     }
 
     /**
-     * Credits amount to payee's account.
-     * Called by Switch after successful debit from payer.
+     * Credits amount to payee's account. Called by Switch after successful
+     * debit from payer.
      *
-     * @param request   Payment request containing payee info
+     * @param request Payment request containing payee info
      * @param accountNumber Account to credit to
      * @param riskScore ML risk score for audit
      * @return TransactionResponse with status
@@ -127,7 +131,7 @@ public class TransactionService {
     @Transactional(isolation = Isolation.SERIALIZABLE)
     public TransactionResponse credit(PaymentRequest request, String accountNumber, BigDecimal riskScore) {
         String txnId = request.getTxnId();
-        log.info("Processing CREDIT: txnId={}, account={}, amount={}", 
+        log.info("Processing CREDIT: txnId={}, account={}, amount={}",
                 txnId, maskAccountNumber(accountNumber), request.getAmount());
 
         try {
@@ -164,7 +168,7 @@ public class TransactionService {
                     account.getCurrentBalance(),
                     riskScore);
 
-            log.info("CREDIT successful: txnId={}, newBalance={}", 
+            log.info("CREDIT successful: txnId={}, newBalance={}",
                     txnId, account.getCurrentBalance());
 
             return buildResponse(txnId, TransactionStatus.SUCCESS, "Credit successful");
@@ -176,17 +180,17 @@ public class TransactionService {
     }
 
     /**
-     * Reverses a debit operation (refunds money to payer).
-     * Called when credit to payee fails after debit succeeded.
+     * Reverses a debit operation (refunds money to payer). Called when credit
+     * to payee fails after debit succeeded.
      *
-     * @param request   Original payment request
+     * @param request Original payment request
      * @param accountNumber Account to reverse debit on
      * @return TransactionResponse with status
      */
     @Transactional(isolation = Isolation.SERIALIZABLE)
     public TransactionResponse reverseDebit(PaymentRequest request, String accountNumber) {
         String txnId = request.getTxnId();
-        log.info("Processing REVERSAL: txnId={}, account={}, amount={}", 
+        log.info("Processing REVERSAL: txnId={}, account={}, amount={}",
                 txnId, maskAccountNumber(accountNumber), request.getAmount());
 
         try {
@@ -219,7 +223,7 @@ public class TransactionService {
                     account.getCurrentBalance(),
                     null);
 
-            log.info("REVERSAL successful: txnId={}, newBalance={}", 
+            log.info("REVERSAL successful: txnId={}, newBalance={}",
                     txnId, account.getCurrentBalance());
 
             return buildResponse(txnId, TransactionStatus.SUCCESS, "Reversal successful");
@@ -234,14 +238,11 @@ public class TransactionService {
      * Creates immutable ledger entry for audit trail.
      */
     private void createLedgerEntry(String txnId, String accountNumber, BigDecimal amount,
-                                   AccountLedger.LedgerDirection direction,
-                                   String counterpartyVpa, BigDecimal balanceAfter,
-                                   BigDecimal riskScore) {
-        // Generate ID manually using database sequence
-        Long nextId = ledgerRepository.getNextLedgerId();
-        
+            AccountLedger.LedgerDirection direction,
+            String counterpartyVpa, BigDecimal balanceAfter,
+            BigDecimal riskScore) {
+        // Let the database auto-generate the ID (IDENTITY strategy)
         AccountLedger entry = AccountLedger.builder()
-                .ledgerId(nextId)
                 .globalTxnId(txnId)
                 .accountNumber(accountNumber)
                 .amount(amount)
@@ -253,6 +254,46 @@ public class TransactionService {
 
         ledgerRepository.save(entry);
         log.debug("Ledger entry created: {}", entry.getLedgerId());
+    }
+
+    /**
+     * Get account by account number (without lock).
+     */
+    public BankAccount getAccountByNumber(String accountNumber) {
+        return accountRepository.findByAccountNumber(accountNumber).orElse(null);
+    }
+
+    /**
+     * Get paginated transaction history for an account.
+     */
+    public org.example.dto.Response getTransactionHistory(String accountNumber, int page, int limit) {
+        org.springframework.data.domain.Pageable pageable
+                = org.springframework.data.domain.PageRequest.of(page, limit);
+
+        var ledgerPage = ledgerRepository.findByAccountNumberPaged(accountNumber, pageable);
+
+        java.util.List<java.util.Map<String, Object>> transactions = ledgerPage.getContent().stream()
+                .map(ledger -> {
+                    java.util.Map<String, Object> map = new java.util.HashMap<>();
+                    map.put("transactionId", ledger.getGlobalTxnId());
+                    map.put("amount", ledger.getAmount());
+                    map.put("direction", ledger.getDirection().name());
+                    map.put("counterpartyVpa", ledger.getCounterpartyVpa());
+                    map.put("balanceAfter", ledger.getBalanceAfter());
+                    map.put("riskScore", ledger.getRiskScore());
+                    map.put("timestamp", ledger.getCreatedAt().toString());
+                    return map;
+                })
+                .collect(java.util.stream.Collectors.toList());
+
+        java.util.Map<String, Object> data = new java.util.HashMap<>();
+        data.put("transactions", transactions);
+        data.put("page", page);
+        data.put("limit", limit);
+        data.put("total", ledgerPage.getTotalElements());
+        data.put("hasMore", ledgerPage.hasNext());
+
+        return new org.example.dto.Response("Transaction history retrieved", 200, null, data);
     }
 
     /**

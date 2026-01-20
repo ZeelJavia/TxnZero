@@ -25,6 +25,7 @@ import java.time.LocalDateTime;
 public class AccountLedger {
 
     @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "ledger_id")
     private Long ledgerId;
 

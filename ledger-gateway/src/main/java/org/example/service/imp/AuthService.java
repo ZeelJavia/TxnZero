@@ -51,12 +51,12 @@ public class AuthService implements IAuth {
     private String jwtKey;
 
     //jwt time
-    private final int exTime = 24*60*60; //in sec
+    private final int exTime = 24 * 60 * 60; //in sec
 
     private final SecureRandom secureRandom = new SecureRandom();
 
     //converter UserDevice to UserDeviceData
-    private UserDeviceData userDeviceToUserDeviceData(UserDevice userDevice){
+    private UserDeviceData userDeviceToUserDeviceData(UserDevice userDevice) {
         UserDeviceData userDeviceData = new UserDeviceData();
         userDeviceData.setDeviceId(userDevice.getDeviceId());
         userDeviceData.setLastLoginIp(userDevice.getLastLoginIp());
@@ -66,8 +66,22 @@ public class AuthService implements IAuth {
         return userDeviceData;
     }
 
+    // Build user response data map for frontend
+    private Map<String, Object> buildUserResponseData(User user, List<UserDeviceData> devices, String jwt) {
+        Map<String, Object> data = new HashMap<>();
+        data.put("userId", user.getUserId());
+        data.put("phoneNumber", user.getPhoneNumber());
+        data.put("fullName", user.getFullName());
+        data.put("vpa", user.getVpa());
+        data.put("kycStatus", user.getKycStatus() != null ? user.getKycStatus().name() : "PENDING");
+        data.put("createdAt", user.getCreatedAt() != null ? user.getCreatedAt().toString() : null);
+        data.put("devices", devices);
+        data.put("jwt", jwt);
+        return data;
+    }
+
     //save user into jwt and cookie
-    private  String jwtAndCookie(HttpServletResponse response, User user){
+    private String jwtAndCookie(HttpServletResponse response, User user) {
         //1. jwt token gen
 
         List<UserDevice> devices = deviceRepository.findByUser(user);
@@ -81,7 +95,6 @@ public class AuthService implements IAuth {
         return jwtToken;
     }
 
-
     //send otp for new device
     private Response sendOtpForNewDevice(PhoneReq req) {
 
@@ -90,7 +103,6 @@ public class AuthService implements IAuth {
         log.info("sendOtpToPhone started for phoneNumber={}", phoneNumber);
         return SendOtpUtil.sendOtp(phoneNumber, secureRandom, tempUserRepo, snsClient);
     }
-
 
     public Response sendOtpToPhone(PhoneReq req) {
 
@@ -112,7 +124,7 @@ public class AuthService implements IAuth {
         TempUser tempUser = tempUserRepo.findByPhoneNumber(phoneNumber);
 
         //3. verify via otp
-        if(tempUser != null && tempUser.getOtp().equals(otp)){
+        if (tempUser != null && tempUser.getOtp().equals(otp)) {
             log.info("OTP verified successfully for phoneNumber={}", phoneNumber);
 
             User user = new User();
@@ -130,7 +142,7 @@ public class AuthService implements IAuth {
         return new Response("OTP verification failed", 400, null, null);
     }
 
-    public Response completeRegistration(HttpServletResponse response, CreateUserReq req){
+    public Response completeRegistration(HttpServletResponse response, CreateUserReq req) {
         //1. get user's data
         String phoneNumber = req.getPhoneNumber();
         String password = req.getPassword();
@@ -149,7 +161,7 @@ public class AuthService implements IAuth {
 
         //4. save user into db
         User user = userRepo.findByPhoneNumber(phoneNumber).orElse(null);
-        if(user == null){
+        if (user == null) {
             log.warn("User not found during registration. phoneNumber={}", phoneNumber);
             return new Response("User not found", 400, null, null);
         }
@@ -160,7 +172,6 @@ public class AuthService implements IAuth {
         user.setFullName(fullName);
         user.setKycStatus(Enums.KycStatus.APPROVED);
         userRepo.save(user);
-
 
         //5. create user's device
         UserDevice userDevice = new UserDevice();
@@ -178,7 +189,7 @@ public class AuthService implements IAuth {
         devices.add(userDeviceToUserDeviceData(userDevice));
 
         //6. create jwt token
-        String jwtToken = JwtUtil.generateJWTToken(jwtKey, exTime*1000, user.getUserId(), user.getPhoneNumber(), user.getFullName(), devices, "");
+        String jwtToken = JwtUtil.generateJWTToken(jwtKey, exTime * 1000, user.getUserId(), user.getPhoneNumber(), user.getFullName(), devices, "");
 
         //7. saved into cookie
         CookieUtil.createJwtCookie(response, jwtToken, exTime);
@@ -202,14 +213,13 @@ public class AuthService implements IAuth {
                 "User auto-login successful",
                 200,
                 null,
-                Collections.singletonMap("jwt", jwtToken)
+                buildUserResponseData(user, devices, jwtToken)
         );
 
     }
 
-
     //login
-    public Response login(HttpServletResponse response, LoginReq req){
+    public Response login(HttpServletResponse response, LoginReq req) {
         //1. get data
         String phoneNumber = req.getPhoneNumber();
         String password = req.getPassword();
@@ -218,27 +228,27 @@ public class AuthService implements IAuth {
 
         //2. check user exits or not
         User user = userRepo.findByPhoneNumber(phoneNumber).orElse(null);
-        if(user == null){
+        if (user == null) {
             log.warn("Login failed. User not found. phoneNumber={}", phoneNumber);
             return new Response("Invalid credentials", 401, null, null);
         }
 
         //3. check password
         String hashedPassword = CryptoUtil.hashMpinWithSalt(password, user.getSalt());
-        if(!Objects.equals(user.getPassword(), hashedPassword)){
+        if (!Objects.equals(user.getPassword(), hashedPassword)) {
             log.warn("Login failed. Invalid password. phoneNumber={}", phoneNumber);
             return new Response("Invalid password", 400, null, null);
         }
 
         //4. check a device
-        if(deviceId == null){
+        if (deviceId == null) {
             return new Response("Device ID is required", 400, null, null);
         }
 
         //5. valid device
         Optional<UserDevice> device = deviceRepository.findByDeviceId(deviceId);
 
-        if(device.isEmpty()){
+        if (device.isEmpty()) {
 
             log.info("New device detected, sending OTP. phoneNumber={}", phoneNumber);
 
@@ -246,16 +256,20 @@ public class AuthService implements IAuth {
             PhoneReq phoneVerificationReq = new PhoneReq();
             phoneVerificationReq.setPhoneNumber(phoneNumber);
             Response res = sendOtpForNewDevice(phoneVerificationReq);
-            return new Response(res.getMessage(),res.getStatusCode(),res.getError(), res.getData());
-        }else if(device.get().isTrusted()){
+            return new Response(res.getMessage(), res.getStatusCode(), res.getError(), res.getData());
+        } else if (device.get().isTrusted()) {
             log.info("Trusted device login success. userId={}", user.getUserId());
             //7. jwt and cookie
             String jwtToken = jwtAndCookie(response, user);
+
+            // Build user data for frontend
+            List<UserDevice> devices = deviceRepository.findByUser(user);
+            List<UserDeviceData> deviceDataList = devices.stream().map(this::userDeviceToUserDeviceData).toList();
+
             return new Response("Login successful", 200, null,
-                    Collections.singletonMap("jwt", jwtToken)
+                    buildUserResponseData(user, deviceDataList, jwtToken)
             );
         }
-
 
         log.warn("Login failed. Untrusted device. phoneNumber={}", phoneNumber);
 
@@ -269,7 +283,7 @@ public class AuthService implements IAuth {
 
     //check otp during device changing
     @Transactional
-    public Response changingDevice(HttpServletResponse response, DeviceChangeReq req){
+    public Response changingDevice(HttpServletResponse response, DeviceChangeReq req) {
         //1. get details
         String phoneNumber = req.getPhoneNumber();
         String otp = req.getOtp();
@@ -279,7 +293,7 @@ public class AuthService implements IAuth {
         TempUser tempUser = tempUserRepo.findByPhoneNumber(phoneNumber);
 
         //3. verify via otp
-        if(tempUser != null && tempUser.getOtp().equals(otp)){
+        if (tempUser != null && tempUser.getOtp().equals(otp)) {
             log.info("Device change OTP verified. phoneNumber={}", phoneNumber);
 
             tempUserRepo.delete(tempUser);
@@ -287,7 +301,7 @@ public class AuthService implements IAuth {
             //4. get main user
             User user = userRepo.findByPhoneNumber(phoneNumber).orElse(null);
 
-            if(user == null){
+            if (user == null) {
                 return new Response("User not found", 400, null, null);
             }
 
@@ -310,8 +324,13 @@ public class AuthService implements IAuth {
             //7. jwt and cookie
             String jwtToken = jwtAndCookie(response, user);
             log.info("JWT regenerated after device change. userId={}", user.getUserId());
+
+            // Build user data for frontend
+            List<UserDevice> devices = deviceRepository.findByUser(user);
+            List<UserDeviceData> deviceDataList = devices.stream().map(this::userDeviceToUserDeviceData).toList();
+
             return new Response("Login is successfully", 200, null,
-                    Collections.singletonMap("jwt", jwtToken)
+                    buildUserResponseData(user, deviceDataList, jwtToken)
             );
 
         }
@@ -321,7 +340,7 @@ public class AuthService implements IAuth {
     }
 
     //logout
-    public Response logout(HttpServletResponse response){
+    public Response logout(HttpServletResponse response) {
         log.info("Logout requested");
         // remove jwt token from cookie
         CookieUtil.clearJwtCookie(response);

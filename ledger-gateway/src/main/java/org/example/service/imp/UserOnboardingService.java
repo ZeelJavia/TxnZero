@@ -16,8 +16,8 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Service for user onboarding operations.
- * Handles user registration, KYC, and device management.
+ * Service for user onboarding operations. Handles user registration, KYC, and
+ * device management.
  */
 @Service
 public class UserOnboardingService {
@@ -36,8 +36,8 @@ public class UserOnboardingService {
      * Registers a new user in the Gateway system.
      *
      * @param phoneNumber User's phone number (unique identifier)
-     * @param fullName    User's full name
-     * @param vpa         Desired VPA (e.g., "alice@l0")
+     * @param fullName User's full name
+     * @param vpa Desired VPA (e.g., "alice@l0")
      * @return Created user entity
      * @throws IllegalArgumentException if phone or VPA already exists
      */
@@ -72,16 +72,16 @@ public class UserOnboardingService {
     /**
      * Adds a new device to user's trusted devices.
      *
-     * @param userId     User's ID
-     * @param deviceId   Device hardware ID
-     * @param modelName  Device model (e.g., "iPhone 15")
-     * @param osVersion  OS version (e.g., "iOS 18.0")
-     * @param loginIp    IP address during device registration
+     * @param userId User's ID
+     * @param deviceId Device hardware ID
+     * @param modelName Device model (e.g., "iPhone 15")
+     * @param osVersion OS version (e.g., "iOS 18.0")
+     * @param loginIp IP address during device registration
      * @return Created device entity
      */
     @Transactional
     public UserDevice addDevice(Long userId, String deviceId, String modelName,
-                                 String osVersion, String loginIp) {
+            String osVersion, String loginIp) {
         log.info("Adding device {} for user {}", deviceId, userId);
 
         User user = userRepository.findById(userId)
@@ -108,14 +108,23 @@ public class UserOnboardingService {
     }
 
     /**
-     * Finds user by VPA.
-     * Used during payment initiation.
+     * Finds user by VPA. Used during payment initiation.
      *
      * @param vpa Virtual Payment Address
      * @return Optional containing user if found
      */
     public Optional<User> findByVpa(String vpa) {
         return userRepository.findByVpa(vpa);
+    }
+
+    /**
+     * Finds user by ID.
+     *
+     * @param userId User's ID
+     * @return Optional containing user if found
+     */
+    public Optional<User> findById(Long userId) {
+        return userRepository.findById(userId);
     }
 
     /**
@@ -157,7 +166,7 @@ public class UserOnboardingService {
     /**
      * Updates user's KYC status.
      *
-     * @param userId    User's ID
+     * @param userId User's ID
      * @param kycStatus New KYC status ("PENDING", "VERIFIED", "REJECTED")
      */
     @Transactional

@@ -39,6 +39,8 @@ public class AccountLinkService {
     @Value("${jwt.secret-key}")
     private String jwtKey;
 
+
+
     private final int exTime = 24*60*60;
 
     //converter UserDevice to UserDeviceData

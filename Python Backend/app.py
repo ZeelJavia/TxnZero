@@ -3,6 +3,7 @@ import logging
 import psycopg2
 import pandas as pd
 import redis
+import json
 from fastapi import FastAPI, BackgroundTasks, HTTPException
 from neo4j import GraphDatabase
 from dotenv import load_dotenv
@@ -27,7 +28,7 @@ REDIS_PORT = int(os.getenv("REDIS_PORT", 6379))
 
 app = FastAPI(title="LedgerZero Graph Sync Engine")
 
-# --- THE SYNC ENGINE CLASS (Embedded) ---
+# --- THE SYNC ENGINE CLASS ---
 class GraphSyncService:
     def __init__(self):
         # 1. Neo4j & Redis
@@ -67,11 +68,10 @@ class GraphSyncService:
         try:
             return {
                 "last_user_time": self.redis_client.get("sync:last_user_time") or "2023-01-01 00:00:00",
-                "last_device_time": self.redis_client.get("sync:last_device_time") or "2023-01-01 00:00:00",
                 "last_txn_time": self.redis_client.get("sync:last_txn_time") or "2023-01-01 00:00:00"
             }
         except Exception:
-            return {"last_user_time": "2023-01-01", "last_device_time": "2023-01-01", "last_txn_time": "2023-01-01"}
+            return {"last_user_time": "2023-01-01", "last_txn_time": "2023-01-01"}
 
     def save_state(self, key, value):
         try:
@@ -80,43 +80,71 @@ class GraphSyncService:
         except Exception:
             pass
 
-    # --- WORKER METHODS (Called by API) ---
+    # --- WORKER METHODS ---
 
-    def sync_users(self):
+    def sync_users(self, force=False):
+        """
+        Syncs users from Postgres -> Neo4j & Redis.
+        If force=True, ignores the timestamp and resyncs ALL users.
+        """
         try:
             self.ensure_conn()
-            # Fetch users
-            query = f"SELECT user_id, phone_number, kyc_status, risk_score, created_at FROM users WHERE created_at > '{self.state['last_user_time']}' ORDER BY created_at ASC LIMIT 1000"
+            
+            # ✅ LOGIC: If force=True, ignore time and fetch ALL users
+            if force:
+                logger.info("⚠️ FORCING FULL USER SYNC (Ignoring Timestamps)...")
+                query = "SELECT user_id, phone_number, kyc_status, risk_score, created_at FROM users ORDER BY created_at ASC LIMIT 1000"
+            else:
+                query = f"SELECT user_id, phone_number, kyc_status, risk_score, created_at FROM users WHERE created_at > '{self.state['last_user_time']}' ORDER BY created_at ASC LIMIT 1000"
             
             df = pd.read_sql(query, self.gateway_conn)
-            if df.empty: return
+            if df.empty: 
+                logger.info("✅ No new users to sync.")
+                return
 
-            logger.info(f"🔄 Syncing {len(df)} New Users...")
+            logger.info(f"🔄 Syncing {len(df)} Users...")
             
             with self.driver.session() as session:
                 for _, row in df.iterrows():
-                    # ✅ 1. Safe Type Conversion
-                    uid_str = str(row['user_id'])
+                    # 1. Normalize Data
+                    phone_str = str(row['phone_number']).replace("+91", "").strip()
                     
-                    # Force Phone to String (Fixes the Pandas Integer issue)
-                    phone_str = str(row['phone_number']) 
+                    # Risk: Normalize 0-100 -> 0.0-1.0. Handle NaN/Null safely.
+                    try:
+                        raw_risk = float(row['risk_score'])
+                        if pd.isna(raw_risk): raw_risk = 0.0
+                    except (ValueError, TypeError):
+                        raw_risk = 0.0
+                        
+                    normalized_risk = raw_risk / 100.0 
                     
-                    # Force Risk Score to Float (Fixes Decimal serialization issue)
-                    risk_val = float(row['risk_score']) if row['risk_score'] is not None else 0.0
+                    kyc_val = 1.0 if str(row['kyc_status']) == "VERIFIED" else 0.0
                     
-                    kyc_str = str(row['kyc_status'])
+                    # ✅ IDENTITY: Use VPA as the unified ID
+                    estimated_vpa = f"{phone_str}@okaxis"
 
+                    # 2. Update Neo4j (Graph Topology)
                     session.run("""
-                        MERGE (u:User {userId: $uid})
+                        MERGE (u:User {userId: $vpa})
                         SET u.phone = $phone, 
                             u.kyc = $kyc, 
-                            u.riskScore = $risk, 
-                            u.vpa = $phone + '@upibank'
-                    """, uid=uid_str, phone=phone_str, kyc=kyc_str, risk=risk_val)
+                            u.riskScore = $risk,
+                            u.postgresId = $pid
+                    """, vpa=estimated_vpa, phone=phone_str, kyc=kyc_val, risk=normalized_risk, pid=str(row['user_id']))
+
+                    # ✅ 3. WRITE TO REDIS (Critical for Java AI)
+                    # Key format must match Java: "user:{userId}:features"
+                    redis_key = f"user:{estimated_vpa}:features"
+                    feature_vector = [normalized_risk, kyc_val]
+                    
+                    self.redis_client.set(redis_key, json.dumps(feature_vector))
+                    logger.info(f"💾 Redis updated for {estimated_vpa}: {feature_vector}")
             
-            # Update state
-            self.save_state('last_user_time', df.iloc[-1]['created_at'])
-            logger.info(f"✅ Users synced up to {df.iloc[-1]['created_at']}")
+            # Update state only if we aren't forcing (to preserve incremental logic)
+            if not force:
+                self.save_state('last_user_time', df.iloc[-1]['created_at'])
+            
+            logger.info(f"✅ Users synced successfully.")
 
         except Exception as e:
             logger.error(f"❌ User Sync Error: {e}")
@@ -125,26 +153,83 @@ class GraphSyncService:
     def sync_transactions(self):
         try:
             self.ensure_conn()
-            # Note: Fetch only SUCCESS transactions
-            query = f"SELECT global_txn_id, payer_vpa, payee_vpa, amount, created_at FROM transactions WHERE created_at > '{self.state['last_txn_time']}' AND status = 'SUCCESS' ORDER BY created_at ASC LIMIT 1000"
+            # ✅ CHANGE 1: Fetch 'ml_fraud_score' from the transactions table
+            # We filter for SUCCESS or BLOCKED_FRAUD (to catch the bad attempts too)
+            query = f"""
+                SELECT global_txn_id, payer_vpa, payee_vpa, amount, ml_fraud_score, created_at 
+                FROM transactions 
+                WHERE created_at > '{self.state['last_txn_time']}' 
+                AND (status = 'SUCCESS' OR status = 'BLOCKED_FRAUD')
+                ORDER BY created_at ASC LIMIT 1000
+            """
             
             df = pd.read_sql(query, self.switch_conn)
             if df.empty: return
 
-            logger.info(f"🔄 Syncing {len(df)} New Txns...")
+            logger.info(f"🔄 Syncing {len(df)} New Txns (Updating User Risk)...")
+            
             with self.driver.session() as session:
                 for _, row in df.iterrows():
+                    # 1. Sync Graph Topology (Neo4j)
                     session.run("""
-                        MERGE (s:User {vpa: $payer})
-                        MERGE (r:User {vpa: $payee})
-                        MERGE (s)-[:SENT_MONEY {txnId: $tid, amount: toFloat($amt), ts: $ts}]->(r)
-                    """, payer=row['payer_vpa'], payee=row['payee_vpa'], tid=row['global_txn_id'], amt=row['amount'], ts=str(row['created_at']))
-            
+                        MERGE (s:User {userId: $payer})
+                        MERGE (r:User {userId: $payee})
+                        MERGE (s)-[:TRANSACTED_WITH {txnId: $tid, amount: toFloat($amt), ts: $ts, risk: toFloat($risk)}]->(r)
+                    """, payer=row['payer_vpa'], payee=row['payee_vpa'], tid=row['global_txn_id'], amt=row['amount'], ts=str(row['created_at']), risk=row['ml_fraud_score'])
+                    
+                    # ==========================================================
+                    # ✅ CHANGE 2: DYNAMIC USER RISK UPDATE (Feedback Loop)
+                    # ==========================================================
+                    try:
+                        txn_risk = float(row['ml_fraud_score']) if row['ml_fraud_score'] else 0.0
+                        
+                        # Only update if the transaction was actually risky (> 0.50)
+                        if txn_risk > 0.50:
+                            payer_vpa = str(row['payer_vpa'])
+                            # Extract phone from VPA (Assuming format: 9023...@okaxis)
+                            phone_extracted = payer_vpa.split('@')[0]
+                            
+                            logger.info(f"⚠️ High Risk Txn detected ({txn_risk}) for {payer_vpa}. Updating Profile...")
+
+                            # A. Update Postgres (Gateway DB) - Permanent Record
+                            # We set the user's risk to the Max of current or new (Never lower it automatically)
+                            update_sql = f"""
+                                UPDATE users 
+                                SET risk_score = GREATEST(risk_score, {txn_risk * 100}) 
+                                WHERE phone_number LIKE '%{phone_extracted}'
+                            """
+                            with self.gateway_conn.cursor() as cursor:
+                                cursor.execute(update_sql)
+                                self.gateway_conn.commit()
+
+                            # B. Update Redis (AI Brain) - Immediate Effect
+                            # We need to fetch the existing KYC status to preserve it
+                            redis_key = f"user:{payer_vpa}:features"
+                            current_features = self.redis_client.get(redis_key)
+                            
+                            kyc_val = 0.0 # Default
+                            if current_features:
+                                try:
+                                    # Existing format: [Risk, KYC]
+                                    data = json.loads(current_features)
+                                    kyc_val = data[1] 
+                                except:
+                                    pass
+                            
+                            # Save new High Risk Score to Redis
+                            new_features = [txn_risk, kyc_val]
+                            self.redis_client.set(redis_key, json.dumps(new_features))
+                            logger.info(f"🔥 BURNED: Updated Redis Risk for {payer_vpa} -> {new_features}")
+
+                    except Exception as risk_err:
+                        logger.error(f"Failed to update user risk: {risk_err}")
+
             self.save_state('last_txn_time', df.iloc[-1]['created_at'])
+            logger.info(f"✅ Transactions synced up to {df.iloc[-1]['created_at']}")
 
         except Exception as e:
             logger.error(f"❌ Txn Sync Error: {e}")
-            self.switch_conn = None 
+            self.switch_conn = None
 
 # --- INITIALIZATION ---
 sync_service = None
@@ -180,11 +265,13 @@ async def trigger_txn_sync(background_tasks: BackgroundTasks):
 
 @app.post("/sync/all")
 async def trigger_full_sync(background_tasks: BackgroundTasks):
-    """Manual full sync"""
+    """Manual full sync - Forces re-read of all user data"""
     if sync_service:
-        background_tasks.add_task(sync_service.sync_users)
+        # ✅ Forces full sync of users (ignoring time) to update Redis Features
+        background_tasks.add_task(sync_service.sync_users, force=True)
+        # Transactions usually just need incremental sync
         background_tasks.add_task(sync_service.sync_transactions)
-    return {"status": "Accepted"}
+    return {"status": "Accepted", "message": "Full Sync Initiated (Forcing User Update)"}
 
 @app.get("/health")
 def health():

@@ -6,6 +6,7 @@ import org.springframework.context.annotation.Configuration;
 
 @Configuration
 public class FilterConfig {
+
     @Bean
     public FilterRegistrationBean<JwtFilter> jwtFilterRegistration(JwtFilter jwtFilter) {
         FilterRegistrationBean<JwtFilter> registrationBean = new FilterRegistrationBean<>();
@@ -16,8 +17,8 @@ public class FilterConfig {
         registrationBean.addUrlPatterns("/api/payments/*");
         registrationBean.addUrlPatterns("/api/account/*");
         registrationBean.addUrlPatterns("/api/internal/*");
-        registrationBean.addUrlPatterns("/api/payments/*");
-        // Add other protected paths here
+        registrationBean.addUrlPatterns("/api/users/*");  // Add users endpoints
+        // Note: /api/auth/* is excluded in JwtFilter.isPublicUrl()
 
         return registrationBean;
     }

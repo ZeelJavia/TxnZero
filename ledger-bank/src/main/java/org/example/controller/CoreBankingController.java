@@ -13,13 +13,12 @@ import org.springframework.web.bind.annotation.*;
 import java.math.BigDecimal;
 
 /**
- * Core Banking Controller.
- * Handles debit, credit, and reversal requests from Switch.
- * 
- * Endpoints:
- * - POST /api/bank/debit   - Debit from payer's account
- * - POST /api/bank/credit  - Credit to payee's account
- * - POST /api/bank/reverse - Reverse a failed transaction
+ * Core Banking Controller. Handles debit, credit, and reversal requests from
+ * Switch.
+ *
+ * Endpoints: - POST /api/bank/debit - Debit from payer's account - POST
+ * /api/bank/credit - Credit to payee's account - POST /api/bank/reverse -
+ * Reverse a failed transaction
  */
 @RestController
 @RequestMapping("/api/bank")
@@ -36,12 +35,12 @@ public class CoreBankingController {
     }
 
     /**
-     * Debit endpoint - debits amount from payer's account.
-     * Called by Switch when processing a payment.
+     * Debit endpoint - debits amount from payer's account. Called by Switch
+     * when processing a payment.
      *
-     * @param request       Payment request from Switch
+     * @param request Payment request from Switch
      * @param accountNumber Account to debit (from VPA lookup)
-     * @param riskScore     ML risk score for audit trail
+     * @param riskScore ML risk score for audit trail
      * @return TransactionResponse with status
      */
     @PostMapping("/debit")
@@ -50,7 +49,7 @@ public class CoreBankingController {
             @RequestHeader("X-Account-Number") String accountNumber,
             @RequestHeader(value = "X-Risk-Score", required = false, defaultValue = "0.0") BigDecimal riskScore) {
 
-        log.info("Received DEBIT request: txnId={}, amount={}", 
+        log.info("Received DEBIT request: txnId={}, amount={}",
                 request.getTxnId(), request.getAmount());
 
         // Validate request
@@ -75,17 +74,18 @@ public class CoreBankingController {
         if (response.getStatus() == TransactionStatus.SUCCESS) {
             return ResponseEntity.ok(response);
         } else {
+            log.info("Transaction failed with status response {} response {}", response.getStatus(), response);
             return ResponseEntity.unprocessableEntity().body(response);
         }
     }
 
     /**
-     * Credit endpoint - credits amount to payee's account.
-     * Called by Switch after successful debit.
+     * Credit endpoint - credits amount to payee's account. Called by Switch
+     * after successful debit.
      *
-     * @param request       Payment request from Switch
+     * @param request Payment request from Switch
      * @param accountNumber Account to credit (from VPA lookup)
-     * @param riskScore     ML risk score for audit trail
+     * @param riskScore ML risk score for audit trail
      * @return TransactionResponse with status
      */
     @PostMapping("/credit")
@@ -94,7 +94,7 @@ public class CoreBankingController {
             @RequestHeader("X-Account-Number") String accountNumber,
             @RequestHeader(value = "X-Risk-Score", required = false, defaultValue = "0.0") BigDecimal riskScore) {
 
-        log.info("Received CREDIT request: txnId={}, amount={}", 
+        log.info("Received CREDIT request: txnId={}, amount={}",
                 request.getTxnId(), request.getAmount());
 
         // Validate request
@@ -124,10 +124,10 @@ public class CoreBankingController {
     }
 
     /**
-     * Reverse endpoint - reverses a debit operation.
-     * Called by Switch when credit fails after debit succeeded.
+     * Reverse endpoint - reverses a debit operation. Called by Switch when
+     * credit fails after debit succeeded.
      *
-     * @param request       Original payment request
+     * @param request Original payment request
      * @param accountNumber Account to credit back (payer's account)
      * @return TransactionResponse with status
      */
@@ -136,7 +136,7 @@ public class CoreBankingController {
             @RequestBody PaymentRequest request,
             @RequestHeader("X-Account-Number") String accountNumber) {
 
-        log.info("Received REVERSE request: txnId={}, amount={}", 
+        log.info("Received REVERSE request: txnId={}, amount={}",
                 request.getTxnId(), request.getAmount());
 
         if (request.getTxnId() == null) {
@@ -156,18 +156,19 @@ public class CoreBankingController {
         }
     }
 
-    /** get account**/
+    /**
+     * get account*
+     */
     @PostMapping("/account-exits")
-    public Response getAccountViaPhone(@RequestBody PhoneReq req){
+    public Response getAccountViaPhone(@RequestBody PhoneReq req) {
         return accountLinkService.checkAccountExitsViaPhoneNumber(req);
     }
 
     /**
-     * generate VPA
-     * return mask account and generated vpa
+     * generate VPA return mask account and generated vpa
      */
     @PostMapping("/generate-vpa")
-    public Response generateVPA(@RequestBody PhoneReq req){
+    public Response generateVPA(@RequestBody PhoneReq req) {
         return accountLinkService.generateVPA(req);
     }
 
@@ -185,6 +186,47 @@ public class CoreBankingController {
     @PostMapping("/set-mpin")
     public Response setMPin(@RequestBody PinBankReq req) {
         return accountLinkService.setPinToAccount(req);
+    }
+
+    /**
+     * Get account balance. Called by Switch when user requests balance check.
+     */
+    @GetMapping("/balance/{accountNumber}")
+    public ResponseEntity<BalanceResponse> getBalance(@PathVariable String accountNumber) {
+        log.info("Balance inquiry for account: {}", maskAccountNumber(accountNumber));
+
+        BankAccount account = transactionService.getAccountByNumber(accountNumber);
+        if (account == null) {
+            return ResponseEntity.notFound().build();
+        }
+
+        return ResponseEntity.ok(BalanceResponse.builder()
+                .maskedAccountNumber(maskAccountNumber(accountNumber))
+                .balance(account.getCurrentBalance())
+                .build());
+    }
+
+    /**
+     * Get transaction history for an account (paginated). Called by Switch to
+     * fetch user's transaction history.
+     */
+    @GetMapping("/transactions/{accountNumber}")
+    public ResponseEntity<Response> getTransactionHistory(
+            @PathVariable String accountNumber,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int limit) {
+        log.info("Transaction history request: account={}, page={}, limit={}",
+                maskAccountNumber(accountNumber), page, limit);
+
+        Response response = transactionService.getTransactionHistory(accountNumber, page, limit);
+        return ResponseEntity.ok(response);
+    }
+
+    private String maskAccountNumber(String accountNumber) {
+        if (accountNumber == null || accountNumber.length() < 4) {
+            return "****";
+        }
+        return "XXXX" + accountNumber.substring(accountNumber.length() - 4);
     }
 
     /**

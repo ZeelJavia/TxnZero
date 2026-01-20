@@ -1,6 +1,9 @@
 package org.example.controller;
 
+import jakarta.servlet.http.HttpServletRequest;
 import org.example.dto.TransactionResponse;
+import org.example.model.User;
+import org.example.repository.UserRepository;
 import org.example.service.imp.PaymentInitiationService;
 import org.example.utils.MaskingUtil;
 import org.slf4j.Logger;
@@ -11,8 +14,8 @@ import org.springframework.web.bind.annotation.*;
 import java.math.BigDecimal;
 
 /**
- * REST Controller for payment operations.
- * Entry point for initiating UPI-like payments.
+ * REST Controller for payment operations. Entry point for initiating UPI-like
+ * payments.
  */
 @RestController
 @RequestMapping("/api/payments")
@@ -21,46 +24,59 @@ public class PaymentController {
     private static final Logger log = LoggerFactory.getLogger(PaymentController.class);
 
     private final PaymentInitiationService paymentService;
+    private final UserRepository userRepository;
 
-    public PaymentController(PaymentInitiationService paymentService) {
+    public PaymentController(PaymentInitiationService paymentService, UserRepository userRepository) {
         this.paymentService = paymentService;
+        this.userRepository = userRepository;
     }
 
     /**
      * Initiate a payment transfer.
-     * 
+     *
      * POST /api/payments/initiate
-     * 
+     *
      * This is the main endpoint called by the frontend when user sends money.
      * Flow: Frontend -> Gateway -> Switch -> Banks
-     * 
-     * Request Body:
-     * {
-     *   "payerVpa": "alice@l0",
-     *   "payeeVpa": "bob@l0",
-     *   "amount": 500.00,
-     *   "mpin": "1234",
-     *   "deviceId": "device-uuid-1234",
-     *   "ipAddress": "192.168.1.5",
-     *   "geoLat": 19.0760,
-     *   "geoLong": 72.8777,
-     *   "wifiSsid": "Home_WiFi",
-     *   "userAgent": "LedgerZero-App/1.0"
-     * }
-     * 
-     * Response:
-     * {
-     *   "txnId": "TXN_1234567890_abc12345",
-     *   "status": "SUCCESS",
-     *   "message": "Payment Successful",
-     *   "riskScore": 0.15
-     * }
+     *
+     * Request Body: { "payerVpa": "alice@l0", "payeeVpa": "bob@l0", "amount":
+     * 500.00, "mpin": "1234", "deviceId": "device-uuid-1234", "ipAddress":
+     * "192.168.1.5", "geoLat": 19.0760, "geoLong": 72.8777, "wifiSsid":
+     * "Home_WiFi", "userAgent": "LedgerZero-App/1.0" }
+     *
+     * Response: { "txnId": "TXN_1234567890_abc12345", "status": "SUCCESS",
+     * "message": "Payment Successful", "riskScore": 0.15 }
      */
     @PostMapping("/initiate")
-    public ResponseEntity<TransactionResponse> initiatePayment(@RequestBody PaymentInitiateRequest request) {
+    public ResponseEntity<TransactionResponse> initiatePayment(HttpServletRequest req, @RequestBody PaymentInitiateRequest request) {
+
+        // Get VPA from JWT attribute, or look up from database if not present
+        String payerVpa = (String) req.getAttribute("vpa");
+
+        if (payerVpa == null || payerVpa.isEmpty()) {
+            // VPA not in JWT, look it up from database using userId
+            Long userId = (Long) req.getAttribute("userId");
+            if (userId != null) {
+                User user = userRepository.findById(userId).orElse(null);
+                if (user != null && user.getVpa() != null) {
+                    payerVpa = user.getVpa();
+                }
+            }
+        }
+
+        // If still no VPA, return error
+        if (payerVpa == null || payerVpa.isEmpty()) {
+            log.warn("Payment initiation failed: No VPA linked to account");
+            return ResponseEntity.badRequest().body(
+                    TransactionResponse.builder()
+                            .status(org.example.enums.TransactionStatus.FAILED)
+                            .message("No VPA linked to your account. Please link a bank first.")
+                            .build()
+            );
+        }
 
         log.info("Payment initiation request: {} -> {} | Amount: {}",
-                MaskingUtil.maskVpa(request.payerVpa()),
+                MaskingUtil.maskVpa(payerVpa),
                 MaskingUtil.maskVpa(request.payeeVpa()),
                 request.amount());
 
@@ -103,7 +119,7 @@ public class PaymentController {
 
         // Initiate payment via service
         TransactionResponse response = paymentService.initiatePayment(
-                request.payerVpa(),
+                payerVpa,
                 request.payeeVpa(),
                 request.amount(),
                 request.mpin(),
@@ -117,18 +133,22 @@ public class PaymentController {
 
         // Return appropriate HTTP status based on transaction status
         return switch (response.getStatus()) {
-            case SUCCESS -> ResponseEntity.ok(response);
-            case PENDING, DEEMED_APPROVED -> ResponseEntity.accepted().body(response);
-            case FAILED, BLOCKED_FRAUD -> ResponseEntity.ok(response); // Still 200, but status in body
-            default -> ResponseEntity.ok(response);
+            case SUCCESS ->
+                ResponseEntity.ok(response);
+            case PENDING, DEEMED_APPROVED ->
+                ResponseEntity.accepted().body(response);
+            case FAILED, BLOCKED_FRAUD ->
+                ResponseEntity.ok(response); // Still 200, but status in body
+            default ->
+                ResponseEntity.ok(response);
         };
     }
 
     /**
      * Check transaction status.
-     * 
+     *
      * GET /api/payments/status/{txnId}
-     * 
+     *
      * Used by frontend to poll for transaction status.
      */
     @GetMapping("/status/{txnId}")
@@ -144,21 +164,21 @@ public class PaymentController {
     }
 
     // --- Request DTO ---
-
     /**
-     * Request body for payment initiation.
-     * Uses Java Record for immutability.
+     * Request body for payment initiation. Uses Java Record for immutability.
      */
     record PaymentInitiateRequest(
-            String payerVpa,      // Sender's VPA (e.g., "alice@l0")
-            String payeeVpa,      // Receiver's VPA (e.g., "bob@l0")
-            BigDecimal amount,    // Amount to transfer
-            String mpin,          // Raw MPIN (will be hashed in service)
-            String deviceId,      // Device hardware ID
-            String ipAddress,     // Request IP
-            Double geoLat,        // Geographic latitude
-            Double geoLong,       // Geographic longitude
-            String wifiSsid,      // WiFi network (optional)
-            String userAgent      // Client user agent
-    ) {}
+            String payerVpa, // Sender's VPA (e.g., "alice@l0")
+            String payeeVpa, // Receiver's VPA (e.g., "bob@l0")
+            BigDecimal amount, // Amount to transfer
+            String mpin, // Raw MPIN (will be hashed in service)
+            String deviceId, // Device hardware ID
+            String ipAddress, // Request IP
+            Double geoLat, // Geographic latitude
+            Double geoLong, // Geographic longitude
+            String wifiSsid, // WiFi network (optional)
+            String userAgent // Client user agent
+            ) {
+
+    }
 }
