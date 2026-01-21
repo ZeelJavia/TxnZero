@@ -38,4 +38,8 @@ public class TransactionResponse {
      * Transaction ID for reference.
      */
     private String txnId;
+
+    private SmsNotificationTask creditSmsNotificationTask;
+
+    private SmsNotificationTask debitSmsNotificationTask;
 }

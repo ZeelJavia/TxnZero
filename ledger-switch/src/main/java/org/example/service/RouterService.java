@@ -2,6 +2,7 @@ package org.example.service;
 
 import org.example.client.BankClient;
 import org.example.dto.PaymentRequest;
+import org.example.dto.SmsNotificationTask;
 import org.example.dto.TransactionResponse;
 import org.example.enums.TransactionStatus;
 import org.example.model.SwitchTransaction;

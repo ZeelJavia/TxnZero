@@ -1,12 +1,14 @@
 package org.example.service;
 
 import org.example.dto.PaymentRequest;
+import org.example.dto.SmsNotificationTask;
 import org.example.dto.TransactionResponse;
 import org.example.enums.TransactionStatus;
 import org.example.model.AccountLedger;
 import org.example.model.BankAccount;
 import org.example.repository.AccountRepository;
 import org.example.repository.LedgerRepository;
+import org.example.utils.PhoneNumberUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
@@ -59,7 +61,7 @@ public class TransactionService {
             if (ledgerRepository.existsByGlobalTxnIdAndAccountNumberAndDirection(
                     txnId, accountNumber, AccountLedger.LedgerDirection.DEBIT)) {
                 log.warn("Duplicate debit attempt: txnId={}", txnId);
-                return buildResponse(txnId, TransactionStatus.SUCCESS, "Already processed");
+                return buildResponse(txnId, TransactionStatus.SUCCESS, "Already processed", null, null);
             }
 
             // Acquire pessimistic lock on account
@@ -68,7 +70,7 @@ public class TransactionService {
 
             if (account == null) {
                 log.error("Account not found: {}", maskAccountNumber(accountNumber));
-                return buildResponse(txnId, TransactionStatus.FAILED, "Account not found");
+                return buildResponse(txnId, TransactionStatus.FAILED, "Account not found", null, null);
             }
 
             if (Boolean.TRUE.equals(account.getFrozenStatus())) {
@@ -82,14 +84,14 @@ public class TransactionService {
             // Verify MPIN
             if (!verifyMpin(account, request.getMpinHash())) {
                 log.warn("Invalid MPIN for account: {}", maskAccountNumber(accountNumber));
-                return buildResponse(txnId, TransactionStatus.FAILED, "Invalid PIN");
+                return buildResponse(txnId, TransactionStatus.FAILED, "Invalid PIN", null, null);
             }
 
             // Check sufficient balance
             if (account.getCurrentBalance().compareTo(request.getAmount()) < 0) {
                 log.warn("Insufficient balance: account={}, balance={}, required={}", 
                         maskAccountNumber(accountNumber), account.getCurrentBalance(), request.getAmount());
-                return buildResponse(txnId, TransactionStatus.FAILED, "Insufficient balance");
+                return buildResponse(txnId, TransactionStatus.FAILED, "Insufficient balance", null, null);
             }
 
             // Perform debit
@@ -103,17 +105,24 @@ public class TransactionService {
                     account.getCurrentBalance(),
                     riskScore);
 
+            SmsNotificationTask debitSms = new SmsNotificationTask();
+            debitSms.setType("Debit");
+            debitSms.setAmount(request.getAmount());
+            debitSms.setRemainingBalance(account.getCurrentBalance());
+            debitSms.setPhoneNumber(PhoneNumberUtil.setCode(account.getPhoneNumber()));
+            debitSms.setAccountNumber(accountNumber);
+
             log.info("DEBIT successful: txnId={}, newBalance={}", 
                     txnId, account.getCurrentBalance());
 
-            return buildResponse(txnId, TransactionStatus.SUCCESS, "Debit successful");
+            return buildResponse(txnId, TransactionStatus.SUCCESS, "Debit successful", debitSms, null);
 
         } catch (ObjectOptimisticLockingFailureException e) {
             log.error("Concurrent modification detected for debit: txnId={}", txnId, e);
-            return buildResponse(txnId, TransactionStatus.FAILED, "Concurrent transaction - retry");
+            return buildResponse(txnId, TransactionStatus.FAILED, "Concurrent transaction - retry", null, null);
         } catch (IllegalStateException e) {
             log.error("Debit failed: txnId={}, reason={}", txnId, e.getMessage());
-            return buildResponse(txnId, TransactionStatus.FAILED, e.getMessage());
+            return buildResponse(txnId, TransactionStatus.FAILED, e.getMessage(), null, null);
         }
     }
 
@@ -137,7 +146,7 @@ public class TransactionService {
             if (ledgerRepository.existsByGlobalTxnIdAndAccountNumberAndDirection(
                     txnId, accountNumber, AccountLedger.LedgerDirection.CREDIT)) {
                 log.warn("Duplicate credit attempt: txnId={}", txnId);
-                return buildResponse(txnId, TransactionStatus.SUCCESS, "Already processed");
+                return buildResponse(txnId, TransactionStatus.SUCCESS, "Already processed", null, null);
             }
 
             // Acquire pessimistic lock on account
@@ -146,13 +155,13 @@ public class TransactionService {
 
             if (account == null) {
                 log.error("Account not found for credit: {}", maskAccountNumber(accountNumber));
-                return buildResponse(txnId, TransactionStatus.FAILED, "Account not found");
+                return buildResponse(txnId, TransactionStatus.FAILED, "Account not found", null, null);
             }
 
             // Check frozen status (even for credits)
             if (account.getFrozenStatus()) {
                 log.warn("Cannot credit frozen account: {}", maskAccountNumber(accountNumber));
-                return buildResponse(txnId, TransactionStatus.FAILED, "Beneficiary account is frozen");
+                return buildResponse(txnId, TransactionStatus.FAILED, "Beneficiary account is frozen", null, null);
             }
 
             // Perform credit
@@ -166,14 +175,21 @@ public class TransactionService {
                     account.getCurrentBalance(),
                     riskScore);
 
+            SmsNotificationTask creditSms = new SmsNotificationTask();
+            creditSms.setType("Credit");
+            creditSms.setAmount(request.getAmount());
+            creditSms.setRemainingBalance(account.getCurrentBalance());
+            creditSms.setPhoneNumber(PhoneNumberUtil.setCode(account.getPhoneNumber()));
+            creditSms.setAccountNumber(accountNumber);
+
             log.info("CREDIT successful: txnId={}, newBalance={}", 
                     txnId, account.getCurrentBalance());
 
-            return buildResponse(txnId, TransactionStatus.SUCCESS, "Credit successful");
+            return buildResponse(txnId, TransactionStatus.SUCCESS, "Credit successful",null, creditSms);
 
         } catch (ObjectOptimisticLockingFailureException e) {
             log.error("Concurrent modification detected for credit: txnId={}", txnId, e);
-            return buildResponse(txnId, TransactionStatus.FAILED, "Concurrent transaction - retry");
+            return buildResponse(txnId, TransactionStatus.FAILED, "Concurrent transaction - retry", null, null);
         }
     }
 
@@ -196,7 +212,7 @@ public class TransactionService {
             if (!ledgerRepository.existsByGlobalTxnIdAndAccountNumberAndDirection(
                     txnId, accountNumber, AccountLedger.LedgerDirection.DEBIT)) {
                 log.warn("No debit found to reverse: txnId={}", txnId);
-                return buildResponse(txnId, TransactionStatus.FAILED, "Original debit not found");
+                return buildResponse(txnId, TransactionStatus.FAILED, "Original debit not found", null, null);
             }
 
             // Check if already reversed (CREDIT entry with same txn would indicate reversal)
@@ -204,7 +220,7 @@ public class TransactionService {
             if (ledgerRepository.existsByGlobalTxnIdAndAccountNumberAndDirection(
                     reversalTxnId, accountNumber, AccountLedger.LedgerDirection.CREDIT)) {
                 log.warn("Already reversed: txnId={}", txnId);
-                return buildResponse(txnId, TransactionStatus.SUCCESS, "Already reversed");
+                return buildResponse(txnId, TransactionStatus.SUCCESS, "Already reversed", null, null);
             }
 
             // Acquire lock and credit back
@@ -221,14 +237,21 @@ public class TransactionService {
                     account.getCurrentBalance(),
                     null);
 
+            SmsNotificationTask reversalSms = new SmsNotificationTask();
+            reversalSms.setType("Reversal");
+            reversalSms.setAmount(request.getAmount());
+            reversalSms.setRemainingBalance(account.getCurrentBalance());
+            reversalSms.setPhoneNumber(PhoneNumberUtil.setCode(account.getPhoneNumber()));
+            reversalSms.setAccountNumber(accountNumber);
+
             log.info("REVERSAL successful: txnId={}, newBalance={}", 
                     txnId, account.getCurrentBalance());
 
-            return buildResponse(txnId, TransactionStatus.SUCCESS, "Reversal successful");
+            return buildResponse(txnId, TransactionStatus.SUCCESS, "Reversal successful", reversalSms, null);
 
         } catch (Exception e) {
             log.error("Reversal failed: txnId={}, error={}", txnId, e.getMessage(), e);
-            return buildResponse(txnId, TransactionStatus.FAILED, "Reversal failed: " + e.getMessage());
+            return buildResponse(txnId, TransactionStatus.FAILED, "Reversal failed: " + e.getMessage(), null, null);
         }
     }
 
@@ -277,11 +300,13 @@ public class TransactionService {
         return "****" + accountNumber.substring(accountNumber.length() - 4);
     }
 
-    private TransactionResponse buildResponse(String txnId, TransactionStatus status, String message) {
+    private TransactionResponse buildResponse(String txnId, TransactionStatus status, String message, SmsNotificationTask debitSms, SmsNotificationTask creditSms) {
         return TransactionResponse.builder()
                 .txnId(txnId)
                 .status(status)
                 .message(message)
+                .creditSmsNotificationTask(creditSms)
+                .debitSmsNotificationTask(debitSms)
                 .build();
     }
 }

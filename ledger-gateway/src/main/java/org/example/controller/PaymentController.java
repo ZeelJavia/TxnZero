@@ -114,7 +114,6 @@ public class PaymentController {
                 request.wifiSsid(),
                 request.userAgent()
         );
-
         // Return appropriate HTTP status based on transaction status
         return switch (response.getStatus()) {
             case SUCCESS -> ResponseEntity.ok(response);
@@ -159,6 +158,6 @@ public class PaymentController {
             Double geoLat,        // Geographic latitude
             Double geoLong,       // Geographic longitude
             String wifiSsid,      // WiFi network (optional)
-            String userAgent      // Client user agent
+            String userAgent     // Client user agent
     ) {}
 }

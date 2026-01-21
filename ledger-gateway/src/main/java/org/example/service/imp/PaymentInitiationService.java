@@ -3,8 +3,10 @@ package org.example.service.imp;
 import org.example.client.SwitchClient;
 import org.example.dto.FraudCheckData;
 import org.example.dto.PaymentRequest;
+import org.example.dto.SmsNotificationTask;
 import org.example.dto.TransactionResponse;
 import org.example.enums.TransactionStatus;
+import org.example.model.Enums;
 import org.example.model.GatewayLog;
 import org.example.model.User;
 import org.example.model.UserDevice;
@@ -39,15 +41,19 @@ public class PaymentInitiationService {
     private final DeviceRepository deviceRepository;
     private final GatewayLogRepository gatewayLogRepository;
     private final SwitchClient switchClient;
+    private final SqsProducerService sqsProducerService;
 
     public PaymentInitiationService(UserRepository userRepository,
                                     DeviceRepository deviceRepository,
                                     GatewayLogRepository gatewayLogRepository,
-                                    SwitchClient switchClient) {
+                                    SwitchClient switchClient,
+                                    SqsProducerService sqsProducerService
+                                    ) {
         this.userRepository = userRepository;
         this.deviceRepository = deviceRepository;
         this.gatewayLogRepository = gatewayLogRepository;
         this.switchClient = switchClient;
+        this.sqsProducerService = sqsProducerService;
     }
 
     /**
@@ -99,7 +105,7 @@ public class PaymentInitiationService {
                 sender.getUserId(), sender.getVpa(), sender.getFullName());
 
         // Step 2: Check KYC status
-        if (!"VERIFIED".equals(sender.getKycStatus())) {
+        if (!Enums.KycStatus.APPROVED.equals(sender.getKycStatus())) {
             log.warn("Sender KYC not verified: {}", sender.getUserId());
             return buildFailedResponse(txnId, "KYC verification required");
         }
@@ -147,6 +153,15 @@ public class PaymentInitiationService {
 
         // Step 9: Call Switch service
         TransactionResponse response = switchClient.initiateTransfer(request);
+
+        //Step 10: add sms
+        //credit sms
+        SmsNotificationTask creditSms = response.getCreditSmsNotificationTask();
+        //debit
+        SmsNotificationTask debitSms = response.getDebitSmsNotificationTask();
+
+        sqsProducerService.queueSmsTask(creditSms);
+        sqsProducerService.queueSmsTask(debitSms);
 
         log.info("Payment result for txnId {}: {}", txnId, response.getStatus());
         return response;
