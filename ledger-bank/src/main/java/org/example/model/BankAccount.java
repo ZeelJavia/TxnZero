@@ -40,7 +40,6 @@ public class BankAccount {
 
 //    @Builder.Default
     @Column(name = "frozen_status")
-    @Builder.Default  // ✅ Important for Lombok Builder
     private Boolean frozenStatus = false; // True if ML detects Money Laundering
 
     @Column(name = "mpin_hash")

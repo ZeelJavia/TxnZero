@@ -13,7 +13,7 @@ import org.neo4j.driver.Result;
 import org.neo4j.driver.Session;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.core.io.Resource;
+import org.springframework.core.io.Resource; // ✅ CRITICAL IMPORT
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 import redis.clients.jedis.Jedis;
@@ -31,9 +31,8 @@ import java.util.stream.LongStream;
 
 /**
  * Hybrid Fraud Detection Engine
- * Layer 1: Deterministic Rules (Blocklist, Velocity Checks)
- * Layer 2: Topological Analysis (Cycles, Fan-In)
- * Layer 3: Probabilistic AI (Graph Neural Network via ONNX)
+ * Layer 1: Deterministic Rules (Database Blocklist, Velocity Checks)
+ * Layer 2: Probabilistic AI (Graph Neural Network via ONNX)
  */
 @Service
 @Slf4j
@@ -51,6 +50,8 @@ public class FraudDetectionService {
     @Value("${gateway.service.url:http://localhost:8080}")
     private String gatewayUrl;
 
+    // ✅ INJECT THE MODEL FILE SAFELY USING SPRING
+    // This finds the file in 'target/classes' or inside the JAR automatically.
     @Value("classpath:fraud_model_v2.onnx")
     private Resource modelResource;
 
@@ -61,33 +62,47 @@ public class FraudDetectionService {
 
     // Thresholds
     private static final double RULE_BASED_BLOCK_SCORE = 1.0;
+    private static final double AI_FRAUD_THRESHOLD = 0.85;
+    private static final double HIGH_VALUE_AMOUNT = 100000.0;
 
     @PostConstruct
     public void init() {
         try {
             log.info("🔍 STARTING AI INITIALIZATION...");
+
+            // 1. Initialize Redis Pool
             this.redisPool = new JedisPool("localhost", 6379);
+
+            // 2. Initialize AI Environment
             this.env = OrtEnvironment.getEnvironment();
 
+            // ✅ 3. VERIFY FILE EXISTENCE
             if (!modelResource.exists()) {
+                log.error("❌ FILE MISSING: Spring could not find 'fraud_model_v2.onnx' in the classpath.");
+                log.error("👉 Please run 'mvn clean compile' to force the file copy.");
                 throw new RuntimeException("Model file missing from build path");
             }
 
+            // ✅ 4. LOAD MODEL (Using Spring Resource Stream)
             byte[] modelBytes;
             try (InputStream is = modelResource.getInputStream()) {
                 modelBytes = is.readAllBytes();
             }
 
+            // Safety Check: Detect Maven Corruption
+            log.info("✅ Found Model File. Size: {} bytes", modelBytes.length);
             if (modelBytes.length < 1000) {
-                throw new RuntimeException("❌ FILE CORRUPTED: Model is too small.");
+                throw new RuntimeException("❌ FILE CORRUPTED: Model is too small. Maven filtering might be damaging the binary file.");
             }
 
+            // 5. Create Session
             this.session = env.createSession(modelBytes, new OrtSession.SessionOptions());
+
             log.info("🚀 AI Brain & Redis Loaded Successfully");
 
         } catch (Exception e) {
             log.error("❌ Failed to initialize AI Engine", e);
-            throw new RuntimeException(e);
+            throw new RuntimeException(e); // This stops the app start if AI fails
         }
     }
 
@@ -102,83 +117,41 @@ public class FraudDetectionService {
         }
     }
 
-    // --- MAIN ENTRY POINT ---
-
+    /**
+     * Main Entry Point: Calculates Risk Score using Rules + AI
+     */
     public double calculateRiskScore(PaymentRequest request) {
         if (request == null) return 0.0;
 
-        // 1. BLOCKLIST CHECK (Layer 1)
+        // --- LAYER 1: HARD RULES (Fast Fail) ---
+
         if (request.getFraudCheckData() != null) {
             String ip = request.getFraudCheckData().getIpAddress();
-            if (isEntityBlocked(ip)) {
-                log.warn("⛔ BLOCKED by Blocklist: IP {}", ip);
+            String deviceId = request.getFraudCheckData().getDeviceId();
+
+            if (isEntityBlocked(ip) || isEntityBlocked(deviceId)) {
+                log.warn("⛔ BLOCKED by Repository: IP/Device is in blocklist");
                 return RULE_BASED_BLOCK_SCORE;
             }
         }
 
-        String payerId = request.getPayerVpa();
-        String payeeId = request.getPayeeVpa();
+        if (request.getAmount() != null && request.getAmount().doubleValue() > HIGH_VALUE_AMOUNT) {
+            log.info("⚠️ High Value Transaction Detected");
+        }
 
-        if (payerId != null && payeeId != null) {
+        // --- LAYER 2: AI ENGINE (Smart Check) ---
+        String userId = request.getPayerVpa();
+        String targetUserId = request.getPayeeVpa();
 
-            // ✅ CHECK 1: Mule Ring (Cycle Detection)
-            if (detectCycle(payerId, payeeId)) {
-                log.warn("🚨 MULE RING DETECTED: Cycle found between {} and {}", payerId, payeeId);
-                return 0.99; // Immediate Block
+        if (userId != null && targetUserId != null) {
+            double aiRisk = runGraphAI(userId, targetUserId);
+            if (aiRisk > AI_FRAUD_THRESHOLD) {
+                log.warn("🤖 BLOCKED by AI: High Fraud Probability ({})", String.format("%.2f", aiRisk));
+                return aiRisk;
             }
-
-            // ✅ CHECK 2: Spider Web (Fan-In Velocity)
-            // If the Payee receives money from 3+ unique people in 10 minutes -> Block
-            int incomingCount = getIncomingTxnCount(payeeId, 10);
-            if (incomingCount >= 3) {
-                log.warn("🕸️ SPIDER WEB DETECTED: Payee {} received funds from {} unique sources in 10 mins.", payeeId, incomingCount);
-                return 0.85; // High Risk
-            }
-
-            // 3. AI ENGINE (Deep Pattern Check)
-            return runGraphAI(payerId, payeeId);
         }
 
         return 0.0;
-    }
-
-    // --- TOPOLOGY HELPERS ---
-
-    /**
-     * 🕸️ Detects if paying 'targetUser' creates a loop back to 'currentUser'
-     */
-    private boolean detectCycle(String sourceUser, String targetUser) {
-        String query = """
-            MATCH (target:User {userId: $target})
-            MATCH (source:User {userId: $source})
-            MATCH path = shortestPath((target)-[:TRANSACTED_WITH*1..4]->(source))
-            RETURN count(path) > 0 as isCycle
-        """;
-        try (Session session = neo4jDriver.session()) {
-            Result result = session.run(query, Map.of("source", sourceUser, "target", targetUser));
-            if (result.hasNext()) return result.next().get("isCycle").asBoolean();
-        } catch (Exception e) {
-            log.error("Cycle check failed", e);
-        }
-        return false;
-    }
-
-    /**
-     * 🕸️ Counts distinct payers sending to this payee in the last X minutes
-     */
-    private int getIncomingTxnCount(String payeeId, int minutes) {
-        String query = """
-            MATCH (p:User)-[t:TRANSACTED_WITH]->(r:User {userId: $payee})
-            WHERE datetime(t.ts) > datetime() - duration({minutes: $min})
-            RETURN count(DISTINCT p) as uniquePayers
-        """;
-        try (Session session = neo4jDriver.session()) {
-            Result result = session.run(query, Map.of("payee", payeeId, "min", minutes));
-            if (result.hasNext()) return result.next().get("uniquePayers").asInt();
-        } catch (Exception e) {
-            log.error("Fan-In check failed", e);
-        }
-        return 0;
     }
 
     /**
@@ -187,23 +160,28 @@ public class FraudDetectionService {
     private double runGraphAI(String userId, String targetUserId) {
         try (Jedis redis = redisPool.getResource()) {
 
-            // 1. Fetch Subgraph
+            // 1. Fetch Raw Edges from Neo4j (Global IDs, e.g., 5973, 1042)
             List<Long> rawEdges = fetchSubgraphFromNeo4j(userId);
 
-            // 2. Add current transaction edge (Ghost Edge)
+            // 2. Add the "Ghost Edge" (Current Transaction)
             long sourceNodeId = getNeo4jNodeId(userId);
             long targetNodeId = getNeo4jNodeId(targetUserId);
 
             rawEdges.add(sourceNodeId);
             rawEdges.add(targetNodeId);
-            rawEdges.add(targetNodeId);
+            rawEdges.add(targetNodeId); // Undirected
             rawEdges.add(sourceNodeId);
 
-            // 3. Remap IDs to local indices 0..N
+            // =================================================================
+            // 3. REMAPPING LOGIC (Global IDs -> Local Indices)
+            // =================================================================
+
+            // Map<GlobalID, LocalIndex>
             Map<Long, Integer> nodeMapping = new HashMap<>();
             List<Long> uniqueNodes = new ArrayList<>();
 
-            nodeMapping.put(sourceNodeId, 0); // Source is always 0
+            // Rule: Source Node (Payer) MUST be Index 0
+            nodeMapping.put(sourceNodeId, 0);
             uniqueNodes.add(sourceNodeId);
 
             int localIndexCounter = 1;
@@ -217,34 +195,41 @@ public class FraudDetectionService {
                 remappedEdgeIndex.add(nodeMapping.get(globalId));
             }
 
-            // 4. Build Features
+            // 4. Build Feature Matrix (x)
             int numNodes = uniqueNodes.size();
             float[] flattenFeatures = new float[numNodes * 2];
 
             for (int i = 0; i < numNodes; i++) {
                 if (i == 0) {
+                    // Source User: Fetch Real Features
                     float[] userFeatures = fetchFeaturesFromRedis(redis, userId);
                     flattenFeatures[0] = userFeatures[0];
                     flattenFeatures[1] = userFeatures[1];
                 } else {
+                    // Neighbors: Dummy Features [0,0] (Optimization)
                     flattenFeatures[i * 2] = 0.0f;
                     flattenFeatures[i * 2 + 1] = 0.0f;
                 }
             }
 
-            // 5. Inference
+            // 5. Run Inference
             double riskScore = runInference(flattenFeatures, numNodes, remappedEdgeIndex);
 
+            // ✅ SUCCESS MESSAGE
             log.info("✅ AI Inference Successful. Risk Score: {}", String.format("%.4f", riskScore));
+
             return riskScore;
 
         } catch (Exception e) {
-            log.error("⚠️ AI Engine Failure: {}", e.getMessage());
+            log.error("⚠️ AI Engine Failure (Fail-Open): {}", e.getMessage());
+            e.printStackTrace();
             return 0.0;
         }
     }
 
     private double runInference(float[] flattenFeatures, int numNodes, List<Integer> remappedEdgeIndex) throws Exception {
+
+        // Create Tensors
         OnnxTensor x = OnnxTensor.createTensor(env, FloatBuffer.wrap(flattenFeatures), new long[]{numNodes, 2});
 
         int numEdges = remappedEdgeIndex.size() / 2;
@@ -261,12 +246,12 @@ public class FraudDetectionService {
 
         var inputs = Map.of("x", x, "edge_index", edges);
 
+        // Run Session
         try (var results = session.run(inputs)) {
             float[][] output = (float[][]) results.get(0).getValue();
-            return output[0][1];
+            return output[0][1]; // Probability of Fraud for Node 0
         }
     }
-
     // --- 🛡️ AUTOMATED KILL SWITCH (Mule Ring Takedown) ---
     public void blockMuleRing(String sourceUserId, String targetUserId) {
         log.warn("🚨 FRAUD CONFIRMED: Initiating Mule Ring Takedown for {} and {}", sourceUserId, targetUserId);
@@ -322,7 +307,7 @@ public class FraudDetectionService {
         } catch (Exception e) {
             log.warn("Redis fetch error for user {}", userId);
         }
-        return new float[]{0.0f, 1.0f}; // Default: Safe, KYC Verified (Assumption)
+        return new float[]{0.0f, 1.0f};
     }
 
     private List<Long> fetchSubgraphFromNeo4j(String userId) {
@@ -332,6 +317,7 @@ public class FraudDetectionService {
             RETURN id(startNode(last(r))) as src, id(endNode(last(r))) as dst
             LIMIT 50
         """;
+
         try (Session session = neo4jDriver.session()) {
             Result result = session.run(query, Map.of("uid", userId));
             while (result.hasNext()) {
@@ -349,6 +335,7 @@ public class FraudDetectionService {
                     Map.of("uid", userId)).single().get(0).asLong();
         }
     }
+
 
     public boolean isEntityBlocked(String entityValue) {
         if (entityValue == null) return false;

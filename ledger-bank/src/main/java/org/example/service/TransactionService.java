@@ -71,12 +71,10 @@ public class TransactionService {
                 return buildResponse(txnId, TransactionStatus.FAILED, "Account not found");
             }
 
-            if (Boolean.TRUE.equals(account.getFrozenStatus())) {
-                log.warn("❌ Transaction blocked: Account {} is frozen", account.getAccountNumber());
-                return TransactionResponse.builder()
-                        .status(TransactionStatus.FAILED)
-                        .message("Account is frozen")
-                        .build();
+            // Check frozen status
+            if (account.getFrozenStatus()) {
+                log.warn("Account frozen: {}", maskAccountNumber(accountNumber));
+                return buildResponse(txnId, TransactionStatus.FAILED, "Account is frozen");
             }
 
             String HashedMpin = CryptoUtil.hashMpinWithSalt(request.getMpinHash(), account.getSalt());

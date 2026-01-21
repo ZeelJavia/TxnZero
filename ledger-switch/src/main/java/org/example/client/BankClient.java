@@ -22,8 +22,8 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * HTTP Client for communication with Bank services.
- * Routes requests to Axis (Port 7070) or SBI (Port 7071) based on bank handle.
+ * HTTP Client for communication with Bank services. Routes requests to Axis
+ * (Port 7070) or SBI (Port 7071) based on bank handle.
  */
 @Component
 public class BankClient {
@@ -33,11 +33,11 @@ public class BankClient {
     private final RestTemplate restTemplate;
     private final String axisBankUrl;
     private final String sbiBankUrl;
-    private final VPARegistryRepository  vpaRegistryRepository;
+    private final VPARegistryRepository vpaRegistryRepository;
 
     public BankClient(RestTemplate restTemplate, @Value("${app.urls.bank.axis}") String axisBankUrl,
-        @Value("${app.urls.bank.sbi}") String sbiBankUrl,
-        VPARegistryRepository  vpaRegistryRepository) {
+            @Value("${app.urls.bank.sbi}") String sbiBankUrl,
+            VPARegistryRepository vpaRegistryRepository) {
         this.sbiBankUrl = sbiBankUrl;
         this.vpaRegistryRepository = vpaRegistryRepository;
         this.restTemplate = restTemplate;
@@ -45,10 +45,9 @@ public class BankClient {
     }
 
     /**
-     * a common template for req-res
-     * helper
+     * a common template for req-res helper
      */
-    private Response callApi(String url, Object reqData){
+    private Response callApi(String url, Object reqData) {
         log.info("Calling bank API: {}", url); // NEW
         //1. set headers
         HttpHeaders headers = new HttpHeaders();
@@ -68,19 +67,19 @@ public class BankClient {
     /**
      * Sends debit request to the payer's bank.
      *
-     * @param request       Payment request with transaction details
-     * @param bankHandle    Bank identifier ("AXIS" or "SBI")
+     * @param request Payment request with transaction details
+     * @param bankHandle Bank identifier ("AXIS" or "SBI")
      * @param accountNumber Account number to debit from (from VPA lookup)
-     * @param riskScore     ML risk score for audit trail
+     * @param riskScore ML risk score for audit trail
      * @return TransactionResponse from the bank
      */
-    public TransactionResponse debit(PaymentRequest request, String bankHandle, 
-                                     String accountNumber, double riskScore) {
+    public TransactionResponse debit(PaymentRequest request, String bankHandle,
+            String accountNumber, double riskScore) {
         String bankUrl = resolveBankUrl(bankHandle);
         String url = bankUrl + "/api/bank/debit";
 
-        log.info("Sending DEBIT request to {} for txnId: {}, account: ****{}", 
-                bankHandle, request.getTxnId(), 
+        log.info("Sending DEBIT request to {} for txnId: {}, account: ****{}",
+                bankHandle, request.getTxnId(),
                 accountNumber.substring(Math.max(0, accountNumber.length() - 4)));
 
         return callBank(url, request, "DEBIT", bankHandle, accountNumber, riskScore);
@@ -89,19 +88,19 @@ public class BankClient {
     /**
      * Sends credit request to the payee's bank.
      *
-     * @param request       Payment request with transaction details
-     * @param bankHandle    Bank identifier ("AXIS" or "SBI")
+     * @param request Payment request with transaction details
+     * @param bankHandle Bank identifier ("AXIS" or "SBI")
      * @param accountNumber Account number to credit to (from VPA lookup)
-     * @param riskScore     ML risk score for audit trail
+     * @param riskScore ML risk score for audit trail
      * @return TransactionResponse from the bank
      */
-    public TransactionResponse credit(PaymentRequest request, String bankHandle, 
-                                      String accountNumber, double riskScore) {
+    public TransactionResponse credit(PaymentRequest request, String bankHandle,
+            String accountNumber, double riskScore) {
         String bankUrl = resolveBankUrl(bankHandle);
         String url = bankUrl + "/api/bank/credit";
 
-        log.info("Sending CREDIT request to {} for txnId: {}, account: ****{}", 
-                bankHandle, request.getTxnId(), 
+        log.info("Sending CREDIT request to {} for txnId: {}, account: ****{}",
+                bankHandle, request.getTxnId(),
                 accountNumber.substring(Math.max(0, accountNumber.length() - 4)));
 
         return callBank(url, request, "CREDIT", bankHandle, accountNumber, riskScore);
@@ -110,8 +109,8 @@ public class BankClient {
     /**
      * Sends reversal request to rollback a failed transaction.
      *
-     * @param request       Original payment request
-     * @param bankHandle    Bank to reverse on
+     * @param request Original payment request
+     * @param bankHandle Bank to reverse on
      * @param accountNumber Account to reverse debit on
      * @return TransactionResponse indicating reversal status
      */
@@ -128,8 +127,8 @@ public class BankClient {
      * Common method to call bank endpoints with required headers.
      */
     private TransactionResponse callBank(String url, PaymentRequest request,
-                                         String operation, String bankHandle,
-                                         String accountNumber, double riskScore) {
+            String operation, String bankHandle,
+            String accountNumber, double riskScore) {
         try {
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
@@ -179,8 +178,9 @@ public class BankClient {
         }
     }
 
-
-    /** get user's account **/
+    /**
+     * get user's account *
+     */
     public Response getAccount(BankClientReq req) {
 
         //1. bank's url
@@ -201,10 +201,10 @@ public class BankClient {
      *
      */
     @Transactional
-    public Response generateVPA(BankClientReq req){
+    public Response generateVPA(BankClientReq req) {
         log.info("Generating VPA for phoneNumber={}, bank={}", req.getPhoneNumber(), req.getBankHandle());
 
-        if(req.getBankHandle() == null){
+        if (req.getBankHandle() == null) {
             return new Response("Bank handle is required", 400, null, null);
         }
 
@@ -218,24 +218,26 @@ public class BankClient {
         PhoneReq phoneReq = new PhoneReq(req.getPhoneNumber());
 
         //4.call helper
-        Response res =  callApi(url, phoneReq);
+        Response res = callApi(url, phoneReq);
 
         //5. check status
-        if(res.getStatusCode() == 200) {
+        if (res.getStatusCode() == 200) {
 
             //6. get data
             String vpa = res.getData().get("vpa").toString();
             String accountNumber = res.getData().get("accountNumber").toString();
 
-
-            //7. save vpa
+            //7. Store the account number directly (not hashed)
+            // Note: In production, this should be encrypted, not plain text or hashed
+            // Hashing would be one-way and prevent lookup
+            //8. save vpa
             VPARegistry registry = new VPARegistry();
             registry.setVpa(vpa);
             registry.setLinkedBankHandle(req.getBankHandle().toUpperCase());
-            registry.setAccountRef(accountNumber);
+            registry.setAccountRef(accountNumber);  // Store raw account number for bank lookup
             vpaRegistryRepository.save(registry);
 
-            //8. return res
+            //9. return res
             Map<String, Object> map = new HashMap<>();
             map.put("vpa", vpa);
             map.put("accountNumber", MaskingUtil.maskAccountNumber(accountNumber));
@@ -253,9 +255,9 @@ public class BankClient {
     /**
      * set MPIN
      */
-    public Response setMPin(PinBankReq req){
+    public Response setMPin(PinBankReq req) {
         log.info("Setting MPIN for vpa={}", req.getVpa());
-        log.info("bankReq is {}",  req);
+        log.info("bankReq is {}", req);
 
         //1. get data
         String vpa = req.getVpa();
@@ -263,7 +265,7 @@ public class BankClient {
         //2. get vpaReg
         VPARegistry vpaRegistry = vpaRegistryRepository.findByVpa(vpa).orElse(null);
 
-        if(vpaRegistry == null){
+        if (vpaRegistry == null) {
             return new Response("VPA not found", 404, null, null);
         }
 
@@ -286,10 +288,61 @@ public class BankClient {
      */
     private String resolveBankUrl(String bankHandle) {
         return switch (bankHandle.toUpperCase()) {
-            case "AXIS" -> axisBankUrl;
-            case "SBI" -> sbiBankUrl;
-            default -> throw new IllegalArgumentException("Unknown bank handle: " + bankHandle);
+            case "AXIS" ->
+                axisBankUrl;
+            case "SBI" ->
+                sbiBankUrl;
+            default ->
+                throw new IllegalArgumentException("Unknown bank handle: " + bankHandle);
         };
+    }
+
+    /**
+     * Get account balance from bank.
+     *
+     * @param bankHandle Bank identifier ("AXIS" or "SBI")
+     * @param accountNumber Account number to get balance for
+     * @return BalanceResponse with current balance
+     */
+    public BalanceResponse getBalance(String bankHandle, String accountNumber) {
+        String bankUrl = resolveBankUrl(bankHandle);
+        String url = bankUrl + "/api/bank/balance/" + accountNumber;
+
+        log.info("Getting balance from {} for account: ****{}",
+                bankHandle, accountNumber.substring(Math.max(0, accountNumber.length() - 4)));
+
+        try {
+            ResponseEntity<BalanceResponse> response = restTemplate.getForEntity(url, BalanceResponse.class);
+            return response.getBody();
+        } catch (Exception e) {
+            log.error("Failed to get balance from {}: {}", bankHandle, e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Get transaction history from bank.
+     *
+     * @param bankHandle Bank identifier ("AXIS" or "SBI")
+     * @param accountNumber Account number
+     * @param page Page number (0-indexed)
+     * @param limit Items per page
+     * @return Response with transaction list
+     */
+    public Response getTransactionHistory(String bankHandle, String accountNumber, int page, int limit) {
+        String bankUrl = resolveBankUrl(bankHandle);
+        String url = bankUrl + "/api/bank/transactions/" + accountNumber + "?page=" + page + "&limit=" + limit;
+
+        log.info("Getting transaction history from {} for account: ****{}",
+                bankHandle, accountNumber.substring(Math.max(0, accountNumber.length() - 4)));
+
+        try {
+            ResponseEntity<Response> response = restTemplate.getForEntity(url, Response.class);
+            return response.getBody();
+        } catch (Exception e) {
+            log.error("Failed to get transaction history from {}: {}", bankHandle, e.getMessage());
+            return new Response("Failed to get transaction history", 500, e.getMessage(), null);
+        }
     }
 
     /**

@@ -1,6 +1,5 @@
 package org.example.service.imp;
 
-
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.example.client.SwitchClient;
@@ -39,12 +38,10 @@ public class AccountLinkService {
     @Value("${jwt.secret-key}")
     private String jwtKey;
 
-
-
-    private final int exTime = 24*60*60;
+    private final int exTime = 24 * 60 * 60;
 
     //converter UserDevice to UserDeviceData
-    private UserDeviceData userDeviceToUserDeviceData(UserDevice userDevice){
+    private UserDeviceData userDeviceToUserDeviceData(UserDevice userDevice) {
         UserDeviceData userDeviceData = new UserDeviceData();
         userDeviceData.setDeviceId(userDevice.getDeviceId());
         userDeviceData.setLastLoginIp(userDevice.getLastLoginIp());
@@ -63,12 +60,12 @@ public class AccountLinkService {
     }
 
     //Get all available banks
-    public Response getAllBanks(){
+    public Response getAllBanks() {
         return switchClient.getAllBanks();
     }
 
     //get phone no which is connected to bank
-    public Response sendOtpToPhoneNumber(HttpServletRequest httpServletRequest, BankHandlerReq req){
+    public Response sendOtpToPhoneNumber(HttpServletRequest httpServletRequest, BankHandlerReq req) {
         //1. get phoneNumber
         String phoneNumber = httpServletRequest.getAttribute("phoneNumber").toString();
 
@@ -81,11 +78,11 @@ public class AccountLinkService {
         log.info("Account status for phoneNumber={} is {} and data is {}", phoneNumber, res.getStatusCode(), res.getData());
 
         //3. check exits or not
-        if(res.getStatusCode() == 200 && res.getData().get("isExits").equals(true)){
+        if (res.getStatusCode() == 200 && res.getData().get("isExits").equals(true)) {
 
             //4. if yes send otp
-            return SendOtpUtil.sendOtp(phoneNumber, secureRandom,tempUserRepo, snsClient);
-        }else{
+            return SendOtpUtil.sendOtp(phoneNumber, secureRandom, tempUserRepo, snsClient);
+        } else {
 
             //5. account is not exits
             return new Response(
@@ -98,7 +95,7 @@ public class AccountLinkService {
     }
 
     //OtpVerification
-    public Response checkOtpAndGenerateVPA(HttpServletRequest httpServletRequest, HttpServletResponse httpServletResponse, BankHandlerVerificationReq req){
+    public Response checkOtpAndGenerateVPA(HttpServletRequest httpServletRequest, HttpServletResponse httpServletResponse, BankHandlerVerificationReq req) {
         log.info("requested data is : {} ", req.toString());
 
         //1. get user's entered data
@@ -110,7 +107,7 @@ public class AccountLinkService {
         TempUser tempUser = tempUserRepo.findByPhoneNumber(phoneNumber);
 
         //3. verify via otp
-        if(tempUser != null && tempUser.getOtp().equals(otp)){
+        if (tempUser != null && tempUser.getOtp().equals(otp)) {
             //4. remove user from tempUser
             tempUserRepo.delete(tempUser);
 
@@ -129,7 +126,7 @@ public class AccountLinkService {
             //7. store into user
             User user = userRepository.findByPhoneNumber(phoneNumber).orElse(null);
 
-            if(user == null){
+            if (user == null) {
                 return new Response("User not found", 400, null, null);
             }
 
@@ -160,13 +157,12 @@ public class AccountLinkService {
     /**
      * set mpin
      */
-    public Response setMpinToAccount(HttpServletRequest request, PinBankReq bankReq){
+    public Response setMpinToAccount(HttpServletRequest request, PinBankReq bankReq) {
         //1. get data
         String vpa = request.getAttribute("vpa").toString();
         String phoneNumber = request.getAttribute("phoneNumber").toString();
 
-
-        log.info("bankReq is {}",  bankReq);
+        log.info("bankReq is {}", bankReq);
 
         //2. set to bankReq
         bankReq.setVpa(vpa);
@@ -174,6 +170,80 @@ public class AccountLinkService {
 
         //3. call switchClient
         return switchClient.setMPin(bankReq);
+    }
+
+    /**
+     * Get all linked bank accounts for the authenticated user. Routes through
+     * Switch to get all VPAs and balances.
+     */
+    public Response getLinkedAccounts(HttpServletRequest request) {
+        String phoneNumber = request.getAttribute("phoneNumber").toString();
+        log.info("Getting linked accounts for phoneNumber={}", phoneNumber);
+        return switchClient.getLinkedAccounts(phoneNumber);
+    }
+
+    /**
+     * Get balance for the user's VPA.
+     */
+    public Response getBalance(HttpServletRequest request) {
+        String vpa = (String) request.getAttribute("vpa");
+
+        // If VPA not in JWT, look it up from database
+        if (vpa == null || vpa.isEmpty()) {
+            Long userId = (Long) request.getAttribute("userId");
+            if (userId != null) {
+                User user = userRepository.findById(userId).orElse(null);
+                if (user != null && user.getVpa() != null) {
+                    vpa = user.getVpa();
+                }
+            }
+        }
+
+        log.info("Getting balance for vpa={}", vpa);
+
+        if (vpa == null || vpa.isEmpty()) {
+            return new Response("No VPA linked to account", 400, null, null);
+        }
+
+        BalanceResponse balance = switchClient.getBalance(vpa);
+        if (balance == null) {
+            return new Response("Failed to get balance", 500, null, null);
+        }
+
+        java.util.Map<String, Object> data = new java.util.HashMap<>();
+        data.put("vpa", balance.getVpa());
+        data.put("balance", balance.getBalance());
+        data.put("bankHandle", balance.getBankHandle());
+        data.put("bankName", balance.getBankName());
+        data.put("maskedAccountNumber", balance.getMaskedAccountNumber());
+
+        return new Response("Balance retrieved successfully", 200, null, data);
+    }
+
+    /**
+     * Get transaction history for the user's VPA.
+     */
+    public Response getTransactionHistory(HttpServletRequest request, int page, int limit) {
+        String vpa = (String) request.getAttribute("vpa");
+
+        // If VPA not in JWT, look it up from database
+        if (vpa == null || vpa.isEmpty()) {
+            Long userId = (Long) request.getAttribute("userId");
+            if (userId != null) {
+                User user = userRepository.findById(userId).orElse(null);
+                if (user != null && user.getVpa() != null) {
+                    vpa = user.getVpa();
+                }
+            }
+        }
+
+        log.info("Getting transaction history for vpa={}", vpa);
+
+        if (vpa == null || vpa.isEmpty()) {
+            return new Response("No VPA linked to account", 400, null, null);
+        }
+
+        return switchClient.getTransactionHistory(vpa, page, limit);
     }
 
 }
