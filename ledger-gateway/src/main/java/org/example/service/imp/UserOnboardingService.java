@@ -113,6 +113,7 @@ public class UserOnboardingService {
      * @param vpa Virtual Payment Address
      * @return Optional containing user if found
      */
+    @Transactional(readOnly = true)
     public Optional<User> findByVpa(String vpa) {
         return userRepository.findByVpa(vpa);
     }
@@ -123,6 +124,7 @@ public class UserOnboardingService {
      * @param userId User's ID
      * @return Optional containing user if found
      */
+    @Transactional(readOnly = true)
     public Optional<User> findById(Long userId) {
         return userRepository.findById(userId);
     }
@@ -133,6 +135,7 @@ public class UserOnboardingService {
      * @param phoneNumber User's phone number
      * @return Optional containing user if found
      */
+    @Transactional(readOnly = true)
     public Optional<User> findByPhoneNumber(String phoneNumber) {
         return userRepository.findByPhoneNumber(phoneNumber);
     }
@@ -143,6 +146,7 @@ public class UserOnboardingService {
      * @param userId User's ID
      * @return List of trusted devices
      */
+    @Transactional(readOnly = true)
     public List<UserDevice> getTrustedDevices(Long userId) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));

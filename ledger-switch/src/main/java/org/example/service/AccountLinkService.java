@@ -8,6 +8,7 @@ import org.example.utils.CryptoUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.*;
@@ -35,6 +36,8 @@ public class AccountLinkService {
     }
 
     //for bank dropdown
+
+    @Transactional(readOnly = true)
     public Response getAllBanks() {
         return new Response(
                 "all available banks",
@@ -45,16 +48,19 @@ public class AccountLinkService {
     }
 
     //call bank - phoneNo to fetch account
+    @Transactional(readOnly = true)
     public Response getAccount(BankClientReq req) {
         return bankClient.getAccount(req);
     }
 
     //generate vpa
+    @Transactional
     public Response generateVPA(BankClientReq req) {
         return bankClient.generateVPA(req);
     }
 
     //set pin
+    @Transactional
     public Response setMpin(PinBankReq req) {
         return bankClient.setMPin(req);
     }
@@ -62,6 +68,7 @@ public class AccountLinkService {
     /**
      * Get balance for a VPA by routing to the appropriate bank.
      */
+    @Transactional(readOnly = true)
     public BalanceResponse getBalanceForVpa(String vpa) {
         log.info("Getting balance for VPA: {}", vpa);
 
@@ -94,6 +101,7 @@ public class AccountLinkService {
     /**
      * Get transaction history for a VPA by routing to the appropriate bank.
      */
+    @Transactional(readOnly = true)
     public Response getTransactionHistoryForVpa(String vpa, int page, int limit) {
         log.info("Getting transaction history for VPA: {}", vpa);
 
@@ -116,6 +124,7 @@ public class AccountLinkService {
      * Get all linked accounts for a phone number. Searches VPA registry for all
      * VPAs with matching phone pattern.
      */
+    @Transactional(readOnly = true)
     public Response getLinkedAccountsForPhone(String phoneNumber) {
         log.info("Getting linked accounts for phone: {}", phoneNumber);
 

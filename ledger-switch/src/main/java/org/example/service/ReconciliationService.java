@@ -6,20 +6,18 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Transactional; // ✅ Import Spring Transactional
 
 import java.time.LocalDateTime;
 import java.util.List;
 
 /**
  * Background Reconciliation Service.
- * 
- * Handles:
+ * * Handles:
  * - Timeout detection for stuck PENDING transactions
  * - Periodic status sync with banks
  * - Cleanup of expired suspicious entity blocks
- * 
- * Runs as scheduled background jobs.
+ * * Runs as scheduled background jobs.
  */
 @Service
 public class ReconciliationService {
@@ -38,6 +36,7 @@ public class ReconciliationService {
     /**
      * Scheduled job to detect and handle stuck PENDING transactions.
      * Runs every 2 minutes.
+     * * ❌ WRITER: Updates transaction status -> PRIMARY
      */
     @Scheduled(fixedRate = 120000) // Every 2 minutes
     @Transactional
@@ -46,6 +45,8 @@ public class ReconciliationService {
 
         LocalDateTime cutoffTime = LocalDateTime.now().minusMinutes(PENDING_TIMEOUT_MINUTES);
 
+        // Reads from Primary to ensure we don't act on stale replica data
+        // (e.g., txn might have just completed 1ms ago on primary)
         List<SwitchTransaction> stuckTransactions =
                 transactionRepository.findByStatusAndCreatedAtBefore("PENDING", cutoffTime);
 
@@ -69,13 +70,11 @@ public class ReconciliationService {
 
     /**
      * Handles a single stuck transaction.
-     * 
      * Options:
      * 1. Query bank for actual status
      * 2. Mark as FAILED if timeout exceeded
      * 3. Retry the operation
-     * 
-     * @param txn The stuck transaction
+     * * @param txn The stuck transaction
      */
     private void handleStuckTransaction(SwitchTransaction txn) {
         log.info("Handling stuck transaction: {}", txn.getGlobalTxnId());
@@ -106,6 +105,7 @@ public class ReconciliationService {
     /**
      * Manual trigger for reconciliation.
      * Can be called via admin API.
+     * ❌ WRITER: Updates data -> PRIMARY
      */
     public void triggerManualReconciliation() {
         log.info("Manual reconciliation triggered");
@@ -115,9 +115,12 @@ public class ReconciliationService {
     /**
      * Get count of stuck transactions.
      * Used for monitoring/alerting.
+     * * ✅ READ-ONLY: Metric/Dashboard Query -> REPLICA
      */
+    @Transactional(readOnly = true)
     public long getStuckTransactionCount() {
         LocalDateTime cutoffTime = LocalDateTime.now().minusMinutes(PENDING_TIMEOUT_MINUTES);
+        // Counting is safe on replica; slight lag in monitoring is acceptable
         return transactionRepository.findByStatusAndCreatedAtBefore("PENDING", cutoffTime).size();
     }
 }

@@ -13,7 +13,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Transactional; // ✅ Spring Transactional
 
 import java.math.BigDecimal;
 
@@ -21,9 +21,10 @@ import java.math.BigDecimal;
  * Core banking transaction service. Handles debit, credit, and reversal
  * operations with proper locking.
  *
- * Locking Strategy: 1. PESSIMISTIC_WRITE lock on account row (via repository)
- * 2. @Version for optimistic locking as fallback 3. SERIALIZABLE isolation for
- * critical operations
+ * Locking Strategy:
+ * 1. PESSIMISTIC_WRITE lock on account row (via repository)
+ * 2. @Version for optimistic locking as fallback
+ * 3. SERIALIZABLE isolation for critical operations
  */
 @Service
 public class TransactionService {
@@ -34,19 +35,14 @@ public class TransactionService {
     private final LedgerRepository ledgerRepository;
 
     public TransactionService(AccountRepository accountRepository,
-            LedgerRepository ledgerRepository) {
+                              LedgerRepository ledgerRepository) {
         this.accountRepository = accountRepository;
         this.ledgerRepository = ledgerRepository;
     }
 
     /**
-     * Debits amount from payer's account. Called by Switch during payment
-     * processing.
-     *
-     * @param request Payment request containing payer info
-     * @param accountNumber Account to debit from
-     * @param riskScore ML risk score for audit
-     * @return TransactionResponse with status
+     * Debits amount from payer's account.
+     * ❌ WRITER: Critical Financial Op -> PRIMARY
      */
     @Transactional(isolation = Isolation.SERIALIZABLE)
     public TransactionResponse debit(PaymentRequest request, String accountNumber, BigDecimal riskScore) {
@@ -78,7 +74,7 @@ public class TransactionService {
             }
 
             String HashedMpin = CryptoUtil.hashMpinWithSalt(request.getMpinHash(), account.getSalt());
-//log.info("Hashed pin {}", request.getMpinHash());
+
             // Verify MPIN
             if (!verifyMpin(account, HashedMpin)) {
                 log.warn("Invalid MPIN for account: {}", maskAccountNumber(accountNumber));
@@ -118,13 +114,8 @@ public class TransactionService {
     }
 
     /**
-     * Credits amount to payee's account. Called by Switch after successful
-     * debit from payer.
-     *
-     * @param request Payment request containing payee info
-     * @param accountNumber Account to credit to
-     * @param riskScore ML risk score for audit
-     * @return TransactionResponse with status
+     * Credits amount to payee's account.
+     * ❌ WRITER: Critical Financial Op -> PRIMARY
      */
     @Transactional(isolation = Isolation.SERIALIZABLE)
     public TransactionResponse credit(PaymentRequest request, String accountNumber, BigDecimal riskScore) {
@@ -178,12 +169,8 @@ public class TransactionService {
     }
 
     /**
-     * Reverses a debit operation (refunds money to payer). Called when credit
-     * to payee fails after debit succeeded.
-     *
-     * @param request Original payment request
-     * @param accountNumber Account to reverse debit on
-     * @return TransactionResponse with status
+     * Reverses a debit operation.
+     * ❌ WRITER: Critical Financial Op -> PRIMARY
      */
     @Transactional(isolation = Isolation.SERIALIZABLE)
     public TransactionResponse reverseDebit(PaymentRequest request, String accountNumber) {
@@ -199,7 +186,7 @@ public class TransactionService {
                 return buildResponse(txnId, TransactionStatus.FAILED, "Original debit not found");
             }
 
-            // Check if already reversed (CREDIT entry with same txn would indicate reversal)
+            // Check if already reversed
             String reversalTxnId = txnId + "_REVERSAL";
             if (ledgerRepository.existsByGlobalTxnIdAndAccountNumberAndDirection(
                     reversalTxnId, accountNumber, AccountLedger.LedgerDirection.CREDIT)) {
@@ -236,10 +223,9 @@ public class TransactionService {
      * Creates immutable ledger entry for audit trail.
      */
     private void createLedgerEntry(String txnId, String accountNumber, BigDecimal amount,
-            AccountLedger.LedgerDirection direction,
-            String counterpartyVpa, BigDecimal balanceAfter,
-            BigDecimal riskScore) {
-        // Let the database auto-generate the ID (IDENTITY strategy)
+                                   AccountLedger.LedgerDirection direction,
+                                   String counterpartyVpa, BigDecimal balanceAfter,
+                                   BigDecimal riskScore) {
         AccountLedger entry = AccountLedger.builder()
                 .globalTxnId(txnId)
                 .accountNumber(accountNumber)
@@ -256,18 +242,23 @@ public class TransactionService {
 
     /**
      * Get account by account number (without lock).
+     * ✅ READ-ONLY: Simple Lookup -> REPLICA
      */
+    @Transactional(readOnly = true)
     public BankAccount getAccountByNumber(String accountNumber) {
         return accountRepository.findByAccountNumber(accountNumber).orElse(null);
     }
 
     /**
      * Get paginated transaction history for an account.
+     * ✅ READ-ONLY: Heavy History Query -> REPLICA
      */
+    @Transactional(readOnly = true)
     public org.example.dto.Response getTransactionHistory(String accountNumber, int page, int limit) {
         org.springframework.data.domain.Pageable pageable
                 = org.springframework.data.domain.PageRequest.of(page, limit);
 
+        // This query goes to the Read Replica
         var ledgerPage = ledgerRepository.findByAccountNumberPaged(accountNumber, pageable);
 
         java.util.List<java.util.Map<String, Object>> transactions = ledgerPage.getContent().stream()
@@ -294,9 +285,6 @@ public class TransactionService {
         return new org.example.dto.Response("Transaction history retrieved", 200, null, data);
     }
 
-    /**
-     * Verifies MPIN hash matches stored hash.
-     */
     private boolean verifyMpin(BankAccount account, String providedMpinHash) {
         if (account.getMpinHash() == null || providedMpinHash == null) {
             return false;
@@ -304,9 +292,6 @@ public class TransactionService {
         return account.getMpinHash().equals(providedMpinHash);
     }
 
-    /**
-     * Masks account number for logging (shows only last 4 digits).
-     */
     private String maskAccountNumber(String accountNumber) {
         if (accountNumber == null || accountNumber.length() < 4) {
             return "****";

@@ -12,6 +12,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional; // ✅ Import Spring Transactional
 
 import java.util.HashMap;
 import java.util.List;
@@ -30,6 +31,8 @@ public class AccountLinkService {
 
 
     // check account is exists or not
+    // ✅ READ-ONLY: Lookup by phone -> REPLICA
+    @Transactional(readOnly = true)
     public Response checkAccountExitsViaPhoneNumber(PhoneReq req) {
 
         log.info("Checking bank account existence for phoneNumber={}", req.getPhoneNumber());
@@ -40,8 +43,6 @@ public class AccountLinkService {
         BankAccount account = accountRepository
                 .findByPhoneNumber(phoneNumber)
                 .orElse(null);
-
-
 
         // 2. check exists or not
         if (account == null) {
@@ -74,6 +75,8 @@ public class AccountLinkService {
         );
     }
 
+    // ❌ WRITER: Creates Account -> PRIMARY
+    @Transactional
     public Response createBankUser(BankAccount bankAccount) {
         log.info("Creating new bank account : {}", bankAccount);
 
@@ -90,6 +93,8 @@ public class AccountLinkService {
         return new Response("Account created successfully", 201, null, map);
     }
 
+    // ✅ READ-ONLY: Computes VPA string (No DB Write) -> REPLICA
+    @Transactional(readOnly = true)
     public Response generateVPA(PhoneReq req) {
 
         log.info("Generating VPA for phoneNumber={}, bank={}", req.getPhoneNumber(), bankName);
@@ -135,6 +140,8 @@ public class AccountLinkService {
     }
 
     //set pin
+    // ❌ WRITER: Updates MPIN -> PRIMARY
+    @Transactional
     public Response setPinToAccount(PinBankReq req) {
         log.info("req for phoneNumber={}", req.getPhoneNumber());
         log.info("req data = {}", req);

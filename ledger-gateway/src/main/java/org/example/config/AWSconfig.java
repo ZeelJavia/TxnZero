@@ -21,7 +21,7 @@ public class AWSconfig {
     @Bean
     public SnsClient amazonSNS() {
         return SnsClient.builder()
-                .region(Region.of(region))
+                .region(Region.US_EAST_1)
                 .credentialsProvider(
                         StaticCredentialsProvider.create(
                                 AwsBasicCredentials.create(accessKey, secretKey)

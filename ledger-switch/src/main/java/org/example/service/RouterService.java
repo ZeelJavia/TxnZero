@@ -11,13 +11,13 @@ import org.example.repository.VPARegistryRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.client.RestTemplate; // ✅ Import RestTemplate
+import org.springframework.transaction.annotation.Transactional; // ✅ Import Spring Transactional
+import org.springframework.web.client.RestTemplate;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Optional;
-import java.util.concurrent.CompletableFuture; // ✅ Import CompletableFuture
+import java.util.concurrent.CompletableFuture;
 
 @Service
 public class RouterService {
@@ -30,7 +30,6 @@ public class RouterService {
     private final FraudDetectionService fraudDetectionService;
     private final BankClient bankClient;
 
-    // ✅ Add RestTemplate
     private final RestTemplate restTemplate = new RestTemplate();
 
     public RouterService(VPARegistryRepository vpaRegistryRepository,
@@ -43,18 +42,17 @@ public class RouterService {
         this.bankClient = bankClient;
     }
 
+    /**
+     * Main Payment Routing Logic.
+     * ❌ WRITER: Writes multiple transaction updates -> PRIMARY
+     */
     @Transactional
     public TransactionResponse routeTransaction(PaymentRequest request) {
 
         String txnId = request.getTxnId();
         log.info("Routing transaction: {}", txnId);
 
-        // ... [Steps 1, 2, 3, 4, 5, 6 remain unchanged] ...
-
-        // (Copy previous steps here if you are editing locally,
-        // I am skipping them to show only the CHANGE at Step 7)
-
-        // Step 1: Payer/Payee Lookup...
+        // Step 1: Payer/Payee Lookup (Reads from Primary to ensure consistency during txn)
         Optional<VPARegistry> payerVpaOpt = vpaRegistryRepository.findByVpa(request.getPayerVpa());
         if (payerVpaOpt.isEmpty()) return buildFailedResponse(txnId, "Payer VPA not registered");
         VPARegistry payerVpa = payerVpaOpt.get();
@@ -69,7 +67,7 @@ public class RouterService {
         String payerAccountNumber = payerVpa.getAccountRef();
         String payeeAccountNumber = payeeVpa.getAccountRef();
 
-        // Step 3: Fraud Check...
+        // Step 3: Fraud Check
         double riskScore = fraudDetectionService.calculateRiskScore(request);
         String riskFlag = determineRiskFlag(riskScore);
 
@@ -87,37 +85,35 @@ public class RouterService {
                 .status("PENDING")
                 .createdAt(LocalDateTime.now())
                 .build();
-        transactionRepository.save(transaction);
+        transactionRepository.save(transaction); // WRITE 1
 
-        // Step 4: Block Check...
+        // Step 4: Block Check
         if (riskScore > FRAUD_THRESHOLD) {
             transaction.setStatus("BLOCKED_FRAUD");
-            transactionRepository.save(transaction);
+            transactionRepository.save(transaction); // WRITE 2
             return buildBlockedResponse(txnId, "Transaction blocked: High risk detected", riskScore);
         }
 
-        // Step 5: Debit...
+        // Step 5: Debit
         TransactionResponse debitResponse = bankClient.debit(request, payerBank, payerAccountNumber, riskScore);
         if (debitResponse.getStatus() != TransactionStatus.SUCCESS) {
             transaction.setStatus("FAILED");
-            transactionRepository.save(transaction);
+            transactionRepository.save(transaction); // WRITE 3
             return TransactionResponse.builder().txnId(txnId).status(debitResponse.getStatus()).message("Debit failed: " + debitResponse.getMessage()).riskScore(riskScore).build();
         }
 
-        // Step 6: Credit...
+        // Step 6: Credit
         TransactionResponse creditResponse = bankClient.credit(request, payeeBank, payeeAccountNumber, riskScore);
         if (creditResponse.getStatus() != TransactionStatus.SUCCESS) {
             bankClient.reverse(request, payerBank, payerAccountNumber);
             transaction.setStatus("FAILED");
-            transactionRepository.save(transaction);
+            transactionRepository.save(transaction); // WRITE 4
             return TransactionResponse.builder().txnId(txnId).status(TransactionStatus.FAILED).message("Credit failed: " + creditResponse.getMessage()).riskScore(riskScore).build();
         }
 
-        // ---------------------------------------------------------------------
-        // ✅ Step 7: Success! (MODIFIED)
-        // ---------------------------------------------------------------------
+        // Step 7: Success!
         transaction.setStatus("SUCCESS");
-        transactionRepository.save(transaction);
+        transactionRepository.save(transaction); // WRITE 5
 
         log.info("Transaction SUCCESS: txnId={}", txnId);
 
@@ -132,12 +128,10 @@ public class RouterService {
                 .build();
     }
 
-    // ✅ HELPER METHOD FOR SYNC
+    // HELPER METHOD FOR SYNC
     private void triggerGraphSync() {
         CompletableFuture.runAsync(() -> {
             try {
-                // If Switch is in Docker & Python is in Docker -> "http://sync-engine:8000"
-                // If Switch is Local & Python is Docker -> "http://localhost:8000"
                 String url = "http://localhost:8000/sync/transactions";
                 restTemplate.postForLocation(url, null);
                 log.info("🚀 Triggered Graph Sync for new transaction");
@@ -147,7 +141,11 @@ public class RouterService {
         });
     }
 
-    // ... [Other helper methods remain unchanged] ...
+    /**
+     * Helper to look up Bank Handle.
+     * ✅ READ-ONLY: Simple Lookup -> REPLICA
+     */
+    @Transactional(readOnly = true)
     public String lookupBankForVpa(String vpa) {
         return vpaRegistryRepository.findByVpa(vpa)
                 .map(VPARegistry::getLinkedBankHandle)

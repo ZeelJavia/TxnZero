@@ -16,8 +16,8 @@ import org.example.utils.JwtUtil;
 import org.example.utils.SendOtpUtil;
 import org.slf4j.Logger;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.stereotype.Repository;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional; // ✅ Import this
 import software.amazon.awssdk.services.sns.SnsClient;
 
 import java.security.SecureRandom;
@@ -59,12 +59,15 @@ public class AccountLinkService {
         this.deviceRepository = deviceRepository;
     }
 
-    //Get all available banks
+    // ✅ READ-ONLY: Static bank data -> REPLICA
+    @Transactional(readOnly = true)
     public Response getAllBanks() {
         return switchClient.getAllBanks();
     }
 
-    //get phone no which is connected to bank
+    // ✅ READ-ONLY: Checking account existence -> REPLICA
+    // (Note: Sending OTP is an SNS call, not a DB write)
+    @Transactional(readOnly = true)
     public Response sendOtpToPhoneNumber(HttpServletRequest httpServletRequest, BankHandlerReq req) {
         //1. get phoneNumber
         String phoneNumber = httpServletRequest.getAttribute("phoneNumber").toString();
@@ -94,7 +97,8 @@ public class AccountLinkService {
         }
     }
 
-    //OtpVerification
+    // ❌ WRITE: Deletes TempUser, Saves User VPA -> PRIMARY
+    @Transactional
     public Response checkOtpAndGenerateVPA(HttpServletRequest httpServletRequest, HttpServletResponse httpServletResponse, BankHandlerVerificationReq req) {
         log.info("requested data is : {} ", req.toString());
 
@@ -157,6 +161,8 @@ public class AccountLinkService {
     /**
      * set mpin
      */
+    // ❌ WRITE: Updates MPIN -> PRIMARY
+    @Transactional
     public Response setMpinToAccount(HttpServletRequest request, PinBankReq bankReq) {
         //1. get data
         String vpa = request.getAttribute("vpa").toString();
@@ -176,6 +182,8 @@ public class AccountLinkService {
      * Get all linked bank accounts for the authenticated user. Routes through
      * Switch to get all VPAs and balances.
      */
+    // ✅ READ-ONLY: History data -> REPLICA
+    @Transactional(readOnly = true)
     public Response getLinkedAccounts(HttpServletRequest request) {
         String phoneNumber = request.getAttribute("phoneNumber").toString();
         log.info("Getting linked accounts for phoneNumber={}", phoneNumber);
@@ -185,6 +193,11 @@ public class AccountLinkService {
     /**
      * Get balance for the user's VPA.
      */
+    // ✅ READ-ONLY (Gateway Side):
+    // Gateway only fetches 'User' VPA metadata here.
+    // The REAL critical balance check happens in 'SwitchClient', which is a separate service.
+    // So for Gateway's DB, this is a safe Read.
+    @Transactional(readOnly = true)
     public Response getBalance(HttpServletRequest request) {
         String vpa = (String) request.getAttribute("vpa");
 
@@ -223,6 +236,8 @@ public class AccountLinkService {
     /**
      * Get transaction history for the user's VPA.
      */
+    // ✅ READ-ONLY: History data -> REPLICA
+    @Transactional(readOnly = true)
     public Response getTransactionHistory(HttpServletRequest request, int page, int limit) {
         String vpa = (String) request.getAttribute("vpa");
 

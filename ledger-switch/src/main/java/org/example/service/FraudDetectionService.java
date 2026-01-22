@@ -18,7 +18,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisPool;
-
+import org.springframework.transaction.annotation.Transactional;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 
@@ -337,6 +337,7 @@ public class FraudDetectionService {
     }
 
 
+    @Transactional(readOnly = true)
     public boolean isEntityBlocked(String entityValue) {
         if (entityValue == null) return false;
         Optional<SuspiciousEntity> entity = suspiciousEntityRepository.findByEntityValue(entityValue);
