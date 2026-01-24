@@ -13,12 +13,13 @@ import org.neo4j.driver.Result;
 import org.neo4j.driver.Session;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.core.io.Resource; // ✅ CRITICAL IMPORT
+import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestTemplate;
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisPool;
-import org.springframework.transaction.annotation.Transactional;
+
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 
@@ -27,12 +28,14 @@ import java.nio.FloatBuffer;
 import java.nio.LongBuffer;
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.concurrent.CompletableFuture; // ✅ Async support
 import java.util.stream.LongStream;
 
 /**
  * Hybrid Fraud Detection Engine
  * Layer 1: Deterministic Rules (Database Blocklist, Velocity Checks)
  * Layer 2: Probabilistic AI (Graph Neural Network via ONNX)
+ * Layer 3: Generative AI (GraphRAG Justification via Python Service)
  */
 @Service
 @Slf4j
@@ -50,8 +53,11 @@ public class FraudDetectionService {
     @Value("${gateway.service.url:http://localhost:8080}")
     private String gatewayUrl;
 
+    // ✅ Python GraphRAG Service URL (Default to localhost:8000)
+    @Value("${graphrag.service.url:http://localhost:8000}")
+    private String graphRagUrl;
+
     // ✅ INJECT THE MODEL FILE SAFELY USING SPRING
-    // This finds the file in 'target/classes' or inside the JAR automatically.
     @Value("classpath:fraud_model_v2.onnx")
     private Resource modelResource;
 
@@ -76,23 +82,20 @@ public class FraudDetectionService {
             // 2. Initialize AI Environment
             this.env = OrtEnvironment.getEnvironment();
 
-            // ✅ 3. VERIFY FILE EXISTENCE
+            // 3. Verify Model File
             if (!modelResource.exists()) {
                 log.error("❌ FILE MISSING: Spring could not find 'fraud_model_v2.onnx' in the classpath.");
-                log.error("👉 Please run 'mvn clean compile' to force the file copy.");
                 throw new RuntimeException("Model file missing from build path");
             }
 
-            // ✅ 4. LOAD MODEL (Using Spring Resource Stream)
+            // 4. Load Model
             byte[] modelBytes;
             try (InputStream is = modelResource.getInputStream()) {
                 modelBytes = is.readAllBytes();
             }
 
-            // Safety Check: Detect Maven Corruption
-            log.info("✅ Found Model File. Size: {} bytes", modelBytes.length);
             if (modelBytes.length < 1000) {
-                throw new RuntimeException("❌ FILE CORRUPTED: Model is too small. Maven filtering might be damaging the binary file.");
+                throw new RuntimeException("❌ FILE CORRUPTED: Model is too small.");
             }
 
             // 5. Create Session
@@ -102,7 +105,7 @@ public class FraudDetectionService {
 
         } catch (Exception e) {
             log.error("❌ Failed to initialize AI Engine", e);
-            throw new RuntimeException(e); // This stops the app start if AI fails
+            throw new RuntimeException(e); // Stop app if AI fails
         }
     }
 
@@ -124,11 +127,11 @@ public class FraudDetectionService {
         if (request == null) return 0.0;
 
         // --- LAYER 1: HARD RULES (Fast Fail) ---
-
         if (request.getFraudCheckData() != null) {
             String ip = request.getFraudCheckData().getIpAddress();
             String deviceId = request.getFraudCheckData().getDeviceId();
 
+            // Uses Replica for checking blocklist to save Primary load
             if (isEntityBlocked(ip) || isEntityBlocked(deviceId)) {
                 log.warn("⛔ BLOCKED by Repository: IP/Device is in blocklist");
                 return RULE_BASED_BLOCK_SCORE;
@@ -145,8 +148,14 @@ public class FraudDetectionService {
 
         if (userId != null && targetUserId != null) {
             double aiRisk = runGraphAI(userId, targetUserId);
+
+            // 🚨 IF HIGH RISK -> TRIGGER GRAPHRAG EXPLANATION
             if (aiRisk > AI_FRAUD_THRESHOLD) {
                 log.warn("🤖 BLOCKED by AI: High Fraud Probability ({})", String.format("%.2f", aiRisk));
+
+                // Fire-and-forget call to Python Service (Layer 3)
+                triggerGraphRAGInvestigation(request, aiRisk);
+
                 return aiRisk;
             }
         }
@@ -155,12 +164,40 @@ public class FraudDetectionService {
     }
 
     /**
+     * 🕵️‍♂️ Calls Python GraphRAG Service to generate a Forensic Report.
+     * Runs asynchronously via CompletableFuture to avoid slowing down the block response.
+     */
+    private void triggerGraphRAGInvestigation(PaymentRequest request, double score) {
+        CompletableFuture.runAsync(() -> {
+            try {
+                String url = graphRagUrl + "/investigate/generate-report";
+
+                Map<String, Object> payload = new HashMap<>();
+                payload.put("txnId", request.getTxnId());
+                payload.put("payerVpa", request.getPayerVpa());
+                payload.put("payeeVpa", request.getPayeeVpa());
+                payload.put("amount", request.getAmount());
+                // Pass the specific reason so the AI knows why it was flagged
+                payload.put("reason", "AI Model Flagged High Risk: " + String.format("%.2f", score));
+
+                log.info("📝 Triggering GraphRAG Forensic Report for Txn: {}", request.getTxnId());
+
+                // Fire the request (we don't wait for the response here, Python handles the report)
+                restTemplate.postForObject(url, payload, String.class);
+
+            } catch (Exception e) {
+                log.error("❌ Failed to trigger GraphRAG investigation: {}", e.getMessage());
+            }
+        });
+    }
+
+    /**
      * 🧠 The AI Logic: Redis Features + Neo4j Topology + ONNX Inference
      */
     private double runGraphAI(String userId, String targetUserId) {
         try (Jedis redis = redisPool.getResource()) {
 
-            // 1. Fetch Raw Edges from Neo4j (Global IDs, e.g., 5973, 1042)
+            // 1. Fetch Raw Edges from Neo4j
             List<Long> rawEdges = fetchSubgraphFromNeo4j(userId);
 
             // 2. Add the "Ghost Edge" (Current Transaction)
@@ -172,11 +209,7 @@ public class FraudDetectionService {
             rawEdges.add(targetNodeId); // Undirected
             rawEdges.add(sourceNodeId);
 
-            // =================================================================
-            // 3. REMAPPING LOGIC (Global IDs -> Local Indices)
-            // =================================================================
-
-            // Map<GlobalID, LocalIndex>
+            // 3. Remapping Logic (Global IDs -> Local Indices)
             Map<Long, Integer> nodeMapping = new HashMap<>();
             List<Long> uniqueNodes = new ArrayList<>();
 
@@ -201,12 +234,12 @@ public class FraudDetectionService {
 
             for (int i = 0; i < numNodes; i++) {
                 if (i == 0) {
-                    // Source User: Fetch Real Features
+                    // Source User: Fetch Real Features from Redis
                     float[] userFeatures = fetchFeaturesFromRedis(redis, userId);
                     flattenFeatures[0] = userFeatures[0];
                     flattenFeatures[1] = userFeatures[1];
                 } else {
-                    // Neighbors: Dummy Features [0,0] (Optimization)
+                    // Neighbors: Dummy Features [0,0]
                     flattenFeatures[i * 2] = 0.0f;
                     flattenFeatures[i * 2 + 1] = 0.0f;
                 }
@@ -214,10 +247,7 @@ public class FraudDetectionService {
 
             // 5. Run Inference
             double riskScore = runInference(flattenFeatures, numNodes, remappedEdgeIndex);
-
-            // ✅ SUCCESS MESSAGE
             log.info("✅ AI Inference Successful. Risk Score: {}", String.format("%.4f", riskScore));
-
             return riskScore;
 
         } catch (Exception e) {
@@ -228,7 +258,6 @@ public class FraudDetectionService {
     }
 
     private double runInference(float[] flattenFeatures, int numNodes, List<Integer> remappedEdgeIndex) throws Exception {
-
         // Create Tensors
         OnnxTensor x = OnnxTensor.createTensor(env, FloatBuffer.wrap(flattenFeatures), new long[]{numNodes, 2});
 
@@ -252,6 +281,7 @@ public class FraudDetectionService {
             return output[0][1]; // Probability of Fraud for Node 0
         }
     }
+
     // --- 🛡️ AUTOMATED KILL SWITCH (Mule Ring Takedown) ---
     public void blockMuleRing(String sourceUserId, String targetUserId) {
         log.warn("🚨 FRAUD CONFIRMED: Initiating Mule Ring Takedown for {} and {}", sourceUserId, targetUserId);
@@ -280,15 +310,11 @@ public class FraudDetectionService {
         if (!muleRing.isEmpty()) {
             try {
                 String url = gatewayUrl + "/api/internal/block-users";
-
-                // Construct Payload
                 Map<String, Object> payload = new HashMap<>();
                 payload.put("userIds", muleRing);
                 payload.put("reason", "Detected by AI Fraud Engine");
 
-                // Send POST Request to Gateway
                 restTemplate.postForEntity(url, payload, String.class);
-
                 log.info("✅ KILL SWITCH EXECUTED: Gateway blocked {} users.", muleRing.size());
             } catch (Exception e) {
                 log.error("❌ FAILED to contact Gateway for blocking: {}", e.getMessage());
@@ -336,7 +362,11 @@ public class FraudDetectionService {
         }
     }
 
-
+    /**
+     * Checks Postgres Blocklist.
+     * ✅ READ-ONLY: Routes to Read Replica to save load on Primary.
+     * Annotated specifically here to avoid holding connections during AI tasks.
+     */
     @Transactional(readOnly = true)
     public boolean isEntityBlocked(String entityValue) {
         if (entityValue == null) return false;

@@ -7,6 +7,8 @@ import json
 from fastapi import FastAPI, BackgroundTasks, HTTPException
 from neo4j import GraphDatabase
 from dotenv import load_dotenv
+from graph_rag import ForensicGraphRAG  # ✅ Import the new class
+from pydantic import BaseModel
 
 # Optional: Import LangChain for Forensic Investigator
 # If not installed, the Investigator will simply be disabled.
@@ -322,3 +324,39 @@ async def trigger_investigation(payload: dict, background_tasks: BackgroundTasks
 @app.get("/health")
 def health():
     return {"status": "up"}
+
+# Initialize RAG Engine
+rag_engine = ForensicGraphRAG()
+
+# --- DATA MODELS ---
+class InvestigationRequest(BaseModel):
+    txnId: str
+    payerVpa: str
+    payeeVpa: str
+    amount: float
+    reason: str
+
+# ... (Previous Sync Logic) ...
+
+# --- NEW ENDPOINT ---
+@app.post("/investigate/generate-report")
+async def generate_forensic_report(req: InvestigationRequest):
+    """
+    Called by the Admin Dashboard or Switch when a user clicks "Investigate".
+    Uses GraphRAG to explain the fraud.
+    """
+    logger.info(f"🕵️‍♂️ Starting Forensic Investigation for {req.txnId}")
+    
+    report = rag_engine.analyze_case(
+        req.txnId, 
+        req.payerVpa, 
+        req.payeeVpa, 
+        req.amount, 
+        req.reason
+    )
+    
+    return {
+        "txnId": req.txnId,
+        "status": "Completed",
+        "forensic_report": report
+    }
