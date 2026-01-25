@@ -161,6 +161,18 @@ public class SwitchClient {
         }
     }
 
+    public Response getTransactionHistory(String vpa) {
+        String url = switchBaseUrl + "/api/switch/transactions-graph/" + vpa;
+        log.info("Getting transaction history for VPA: {}", vpa);
+        try {
+            ResponseEntity<Response> response = restTemplate.getForEntity(url, Response.class);
+            return response.getBody();
+        } catch (Exception e) {
+            log.error("Failed to get transaction history for VPA {}: {}", vpa, e.getMessage());
+            return new Response("Failed to get transaction history", 500, e.getMessage(), null);
+        }
+    }
+
     /**
      * Get all linked accounts for a phone number. Routes through Switch to get
      * all VPAs and their balances.

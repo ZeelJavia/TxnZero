@@ -7,20 +7,19 @@ import {
   ArrowUpRight,
   ArrowDownLeft,
   Filter,
-  Calendar,
-  ChevronDown,
-  Download,
-  CheckCircle2,
   XCircle,
   Clock,
-  AlertTriangle,
   RefreshCw,
+  Network,
+  List,
 } from 'lucide-react';
-import { Card, Input, TransactionCard, Skeleton } from '../../components/ui';
-import { useTransactionStore, useAccountStore, useAuthStore } from '../../store';
+import { Card, TransactionCard, Skeleton, NetworkGraph } from '../../components/ui';
+import type { RawTransaction } from '../../components/ui/NetworkGraph';
+import { useAuthStore } from '../../store';
 import { useTransactionHistory } from '../../hooks';
 import { formatCurrency, cn } from '../../utils';
-import type { Transaction, TransactionStatus } from '../../types';
+import { api } from '../../services/api';
+import type { Transaction } from '../../types';
 
 // ============================================
 // TRANSACTIONS PAGE
@@ -28,6 +27,7 @@ import type { Transaction, TransactionStatus } from '../../types';
 
 type FilterType = 'all' | 'sent' | 'received' | 'pending' | 'failed';
 type DateFilter = 'all' | 'today' | 'week' | 'month';
+type TabType = 'transactions' | 'network';
 
 export const TransactionsPage = () => {
   const navigate = useNavigate();
@@ -35,15 +35,45 @@ export const TransactionsPage = () => {
   const { user } = useAuthStore();
   const userVpa = user?.vpa;
 
+  const [activeTab, setActiveTab] = useState<TabType>('transactions');
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<FilterType>('all');
   const [dateFilter, setDateFilter] = useState<DateFilter>('all');
   const [showFilters, setShowFilters] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
+  // Network graph state
+  const [graphTransactions, setGraphTransactions] = useState<RawTransaction[]>([]);
+  const [isGraphLoading, setIsGraphLoading] = useState(false);
+
+  // Fetch graph data when tab changes to network
+  useEffect(() => {
+    if (activeTab === 'network') {
+      fetchGraphData();
+    }
+  }, [activeTab]);
+
+  const fetchGraphData = async () => {
+    setIsGraphLoading(true);
+    try {
+      const response = await api.get('/api/account/transactions-graph');
+      if (response.data?.data?.transactions) {
+        setGraphTransactions(response.data.data.transactions);
+      }
+    } catch (error) {
+      console.error('Failed to fetch transaction graph:', error);
+    } finally {
+      setIsGraphLoading(false);
+    }
+  };
+
   const handleRefresh = async () => {
     setIsRefreshing(true);
-    await refresh();
+    if (activeTab === 'network') {
+      await fetchGraphData();
+    } else {
+      await refresh();
+    }
     setIsRefreshing(false);
   };
 
@@ -121,39 +151,75 @@ export const TransactionsPage = () => {
           <button
             onClick={() => navigate(-1)}
             className="w-10 h-10 rounded-xl bg-slate-800/80 flex items-center justify-center text-slate-400 hover:text-white transition-colors"
+            title="Go back"
           >
             <ArrowLeft size={20} />
           </button>
           <h1 className="text-lg font-semibold text-white flex-1">Transactions</h1>
-          <button
-            onClick={() => setShowFilters(!showFilters)}
-            className={cn(
-              'w-10 h-10 rounded-xl flex items-center justify-center transition-colors',
-              showFilters
-                ? 'bg-primary-500 text-white'
-                : 'bg-slate-800/80 text-slate-400 hover:text-white'
-            )}
-          >
-            <Filter size={20} />
-          </button>
+          {activeTab === 'transactions' && (
+            <button
+              onClick={() => setShowFilters(!showFilters)}
+              className={cn(
+                'w-10 h-10 rounded-xl flex items-center justify-center transition-colors',
+                showFilters
+                  ? 'bg-primary-500 text-white'
+                  : 'bg-slate-800/80 text-slate-400 hover:text-white'
+              )}
+              title="Toggle filters"
+            >
+              <Filter size={20} />
+            </button>
+          )}
         </div>
 
-        {/* Search */}
-        <div className="px-4 pb-4">
-          <div className="relative">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500" />
-            <input
-              type="text"
-              placeholder="Search transactions..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-12 pr-4 py-3 rounded-xl bg-slate-800/50 border border-slate-700/50 text-white placeholder-slate-500 focus:outline-none focus:border-primary-500/50"
-            />
+        {/* Tab Navigation */}
+        <div className="px-4 pb-3">
+          <div className="flex gap-2 p-1 rounded-xl bg-slate-800/50 border border-slate-700/50">
+            <button
+              onClick={() => setActiveTab('transactions')}
+              className={cn(
+                'flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium transition-all',
+                activeTab === 'transactions'
+                  ? 'bg-primary-500 text-white shadow-lg shadow-primary-500/20'
+                  : 'text-slate-400 hover:text-white'
+              )}
+            >
+              <List size={16} />
+              <span>Transactions</span>
+            </button>
+            <button
+              onClick={() => setActiveTab('network')}
+              className={cn(
+                'flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium transition-all',
+                activeTab === 'network'
+                  ? 'bg-primary-500 text-white shadow-lg shadow-primary-500/20'
+                  : 'text-slate-400 hover:text-white'
+              )}
+            >
+              <Network size={16} />
+              <span>My Network</span>
+            </button>
           </div>
         </div>
 
-        {/* Filters */}
-        {showFilters && (
+        {/* Search - Only show for transactions tab */}
+        {activeTab === 'transactions' && (
+          <div className="px-4 pb-4">
+            <div className="relative">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500" />
+              <input
+                type="text"
+                placeholder="Search transactions..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-12 pr-4 py-3 rounded-xl bg-slate-800/50 border border-slate-700/50 text-white placeholder-slate-500 focus:outline-none focus:border-primary-500/50"
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Filters - Only show for transactions tab */}
+        {activeTab === 'transactions' && showFilters && (
           <motion.div
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
@@ -213,94 +279,145 @@ export const TransactionsPage = () => {
 
       {/* Content */}
       <div className="p-4 space-y-6 max-w-2xl mx-auto">
-        {/* Stats Summary */}
-        <div className="grid grid-cols-3 gap-3">
-          <Card className="p-4 text-center">
-            <ArrowUpRight className="w-5 h-5 text-danger-400 mx-auto mb-2" />
-            <p className="text-xs text-slate-500">Sent</p>
-            <p className="text-lg font-semibold text-white">
-              {isLoading ? <Skeleton className="h-6 w-16 mx-auto" /> : formatCurrency(stats.totalSent)}
-            </p>
-          </Card>
-          <Card className="p-4 text-center">
-            <ArrowDownLeft className="w-5 h-5 text-success-400 mx-auto mb-2" />
-            <p className="text-xs text-slate-500">Received</p>
-            <p className="text-lg font-semibold text-white">
-              {isLoading ? <Skeleton className="h-6 w-16 mx-auto" /> : formatCurrency(stats.totalReceived)}
-            </p>
-          </Card>
-          <Card className="p-4 text-center">
-            <Clock className="w-5 h-5 text-warning-400 mx-auto mb-2" />
-            <p className="text-xs text-slate-500">Pending</p>
-            <p className="text-lg font-semibold text-white">
-              {isLoading ? <Skeleton className="h-6 w-8 mx-auto" /> : stats.pendingCount}
-            </p>
-          </Card>
-        </div>
+        {activeTab === 'transactions' ? (
+          <>
+            {/* Stats Summary */}
+            <div className="grid grid-cols-3 gap-3">
+              <Card className="p-4 text-center bg-slate-900/50">
+                <ArrowUpRight className="w-5 h-5 text-danger-400 mx-auto mb-2" />
+                <p className="text-xs text-slate-500">Sent</p>
+                <p className="text-lg font-semibold text-white">
+                  {isLoading ? <Skeleton className="h-6 w-16 mx-auto" /> : formatCurrency(stats.totalSent)}
+                </p>
+              </Card>
+              <Card className="p-4 text-center bg-slate-900/50">
+                <ArrowDownLeft className="w-5 h-5 text-success-400 mx-auto mb-2" />
+                <p className="text-xs text-slate-500">Received</p>
+                <p className="text-lg font-semibold text-white">
+                  {isLoading ? <Skeleton className="h-6 w-16 mx-auto" /> : formatCurrency(stats.totalReceived)}
+                </p>
+              </Card>
+              <Card className="p-4 text-center bg-slate-900/50">
+                <Clock className="w-5 h-5 text-warning-400 mx-auto mb-2" />
+                <p className="text-xs text-slate-500">Pending</p>
+                <p className="text-lg font-semibold text-white">
+                  {isLoading ? <Skeleton className="h-6 w-8 mx-auto" /> : stats.pendingCount}
+                </p>
+              </Card>
+            </div>
 
-        {/* Transaction List */}
-        {isLoading ? (
-          <Card className="divide-y divide-slate-800/50">
-            {[1, 2, 3, 4, 5].map((i) => (
-              <div key={i} className="p-4 flex items-center gap-4">
-                <Skeleton className="w-12 h-12 rounded-full" />
-                <div className="flex-1 space-y-2">
-                  <Skeleton className="h-4 w-32" />
-                  <Skeleton className="h-3 w-24" />
-                </div>
-                <Skeleton className="h-5 w-20" />
+            {/* Transaction List */}
+            {isLoading ? (
+              <Card className="divide-y divide-slate-800/50 bg-slate-900/50">
+                {[1, 2, 3, 4, 5].map((i) => (
+                  <div key={i} className="p-4 flex items-center gap-4">
+                    <Skeleton className="w-12 h-12 rounded-full" />
+                    <div className="flex-1 space-y-2">
+                      <Skeleton className="h-4 w-32" />
+                      <Skeleton className="h-3 w-24" />
+                    </div>
+                    <Skeleton className="h-5 w-20" />
+                  </div>
+                ))}
+              </Card>
+            ) : filteredTransactions.length === 0 ? (
+              <Card className="p-12 text-center bg-slate-900/50">
+                <Search className="w-12 h-12 text-slate-600 mx-auto mb-4" />
+                <h3 className="text-lg font-semibold text-white mb-2">No transactions found</h3>
+                <p className="text-slate-400">
+                  {searchQuery
+                    ? 'Try adjusting your search or filters'
+                    : 'Your transactions will appear here'}
+                </p>
+              </Card>
+            ) : (
+              <div className="space-y-6">
+                {Object.entries(groupedTransactions).map(([date, txns]) => (
+                  <div key={date}>
+                    <h3 className="text-sm font-medium text-slate-400 mb-3 px-1">{date}</h3>
+                    <Card className="divide-y divide-slate-800/50 bg-slate-900/50">
+                      {txns.map((txn) => (
+                        <TransactionCard
+                          key={txn.transactionId}
+                          transaction={txn}
+                          currentUserVpa={userVpa || ''}
+                          onClick={() => navigate(`/transactions/${txn.transactionId}`)}
+                        />
+                      ))}
+                    </Card>
+                  </div>
+                ))}
+
+                {/* Load More Button */}
+                {hasMore && (
+                  <button
+                    onClick={loadMore}
+                    disabled={isLoading}
+                    className="w-full py-3 rounded-xl bg-slate-800/50 border border-slate-700/50 text-slate-400 hover:text-white hover:border-primary-500/50 transition-all disabled:opacity-50"
+                  >
+                    {isLoading ? 'Loading...' : 'Load More Transactions'}
+                  </button>
+                )}
               </div>
-            ))}
-          </Card>
-        ) : filteredTransactions.length === 0 ? (
-          <Card className="p-12 text-center">
-            <Search className="w-12 h-12 text-slate-600 mx-auto mb-4" />
-            <h3 className="text-lg font-semibold text-white mb-2">No transactions found</h3>
-            <p className="text-slate-400">
-              {searchQuery
-                ? 'Try adjusting your search or filters'
-                : 'Your transactions will appear here'}
-            </p>
-          </Card>
-        ) : (
-          <div className="space-y-6">
-            {Object.entries(groupedTransactions).map(([date, txns]) => (
-              <div key={date}>
-                <h3 className="text-sm font-medium text-slate-400 mb-3 px-1">{date}</h3>
-                <Card className="divide-y divide-slate-800/50">
-                  {txns.map((txn) => (
-                    <TransactionCard
-                      key={txn.transactionId}
-                      transaction={txn}
-                      currentUserVpa={userVpa || ''}
-                      onClick={() => navigate(`/transactions/${txn.transactionId}`)}
-                    />
-                  ))}
-                </Card>
-              </div>
-            ))}
-            
-            {/* Load More Button */}
-            {hasMore && (
-              <button
-                onClick={loadMore}
-                disabled={isLoading}
-                className="w-full py-3 rounded-xl bg-slate-800/50 border border-slate-700/50 text-slate-400 hover:text-white hover:border-primary-500/50 transition-all disabled:opacity-50"
-              >
-                {isLoading ? 'Loading...' : 'Load More Transactions'}
-              </button>
             )}
+          </>
+        ) : (
+          /* Network Graph Tab */
+          <div className="space-y-4">
+            {/* Network Info Header */}
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-semibold text-white">Transaction Network</h2>
+                <p className="text-sm text-slate-400">
+                  Visualize your transaction connections
+                </p>
+              </div>
+              <div className="flex items-center gap-2 text-sm">
+                <div className="px-3 py-1.5 rounded-lg bg-slate-800/50 border border-slate-700/50">
+                  <span className="text-slate-400">Transactions: </span>
+                  <span className="text-white font-medium">{graphTransactions.length}</span>
+                </div>
+                <div className="px-3 py-1.5 rounded-lg bg-slate-800/50 border border-slate-700/50">
+                  <span className="text-slate-400">Contacts: </span>
+                  <span className="text-white font-medium">
+                    {new Set(graphTransactions.map(t => t.counterpartyVpa)).size}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Network Graph */}
+            <NetworkGraph
+              transactions={graphTransactions}
+              isLoading={isGraphLoading}
+              onRefresh={fetchGraphData}
+              currentUserVpa={userVpa || undefined}
+            />
+
+            {/* Graph Tips */}
+            <Card className="p-4 bg-slate-900/50">
+              <h4 className="text-sm font-medium text-white mb-2">Tips</h4>
+              <ul className="text-xs text-slate-400 space-y-1">
+                <li>• Drag nodes to rearrange the graph</li>
+                <li>• Scroll to zoom in/out</li>
+                <li>• Click on a node to see details</li>
+                <li>• Use controls on the right to zoom and reset</li>
+              </ul>
+            </Card>
           </div>
         )}
-        
-        {/* Refresh Button */}
-        <button
-          onClick={handleRefresh}
-          disabled={isRefreshing}
-          className="fixed bottom-20 right-4 w-12 h-12 rounded-full bg-primary-500 text-white shadow-lg flex items-center justify-center hover:bg-primary-600 transition-colors disabled:opacity-50"
-        >
-          <RefreshCw size={20} className={isRefreshing ? 'animate-spin' : ''} />
-        </button>
+
+        {/* Refresh Button - Only show for transactions tab */}
+        {activeTab === 'transactions' && (
+          <button
+            onClick={handleRefresh}
+            disabled={isRefreshing}
+            className="fixed bottom-20 right-4 w-12 h-12 rounded-full bg-primary-500 text-white shadow-lg flex items-center justify-center hover:bg-primary-600 transition-colors disabled:opacity-50"
+            title="Refresh transactions"
+          >
+            <RefreshCw size={20} className={isRefreshing ? 'animate-spin' : ''} />
+          </button>
+        )}
       </div>
     </div>
   );

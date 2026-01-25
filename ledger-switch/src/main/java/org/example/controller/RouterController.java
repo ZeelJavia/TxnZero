@@ -158,6 +158,19 @@ public class RouterController {
     }
 
     /**
+     * Get transaction history for a VPA. Gateway calls this, Switch routes to
+     * appropriate bank.
+     */
+    @GetMapping("/transactions-graph/{vpa}")
+    public ResponseEntity<Response> getTransactionGraph(
+            @PathVariable String vpa) {
+        log.info("Transaction history request for VPA: {}", vpa);
+
+        Response response = accountLinkService.getTransactionHistoryForVpa(vpa);
+        return ResponseEntity.ok(response);
+    }
+
+    /**
      * Get all linked accounts for a user (by phone number). Returns list of
      * VPAs with their bank info and balances.
      */

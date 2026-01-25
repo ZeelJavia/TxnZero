@@ -1,10 +1,7 @@
 package org.example.service.imp;
 
 import org.example.client.SwitchClient;
-import org.example.dto.FraudCheckData;
-import org.example.dto.PaymentRequest;
-import org.example.dto.SmsNotificationTask;
-import org.example.dto.TransactionResponse;
+import org.example.dto.*;
 import org.example.enums.TransactionStatus;
 import org.example.model.Enums;
 import org.example.model.GatewayLog;
@@ -13,7 +10,6 @@ import org.example.model.UserDevice;
 import org.example.repository.DeviceRepository;
 import org.example.repository.GatewayLogRepository;
 import org.example.repository.UserRepository;
-import org.example.utils.CryptoUtil;
 import org.example.utils.MaskingUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -48,7 +44,7 @@ public class PaymentInitiationService {
                                     GatewayLogRepository gatewayLogRepository,
                                     SwitchClient switchClient,
                                     SqsProducerService sqsProducerService
-                                    ) {
+    ) {
         this.userRepository = userRepository;
         this.deviceRepository = deviceRepository;
         this.gatewayLogRepository = gatewayLogRepository;

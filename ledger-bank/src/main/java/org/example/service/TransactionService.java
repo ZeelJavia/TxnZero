@@ -18,6 +18,8 @@ import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional; // ✅ Spring Transactional
 
 import java.math.BigDecimal;
+import java.util.List;
+import java.util.Map;
 
 /**
  * Core banking transaction service. Handles debit, credit, and reversal
@@ -306,6 +308,16 @@ public class TransactionService {
         data.put("hasMore", ledgerPage.hasNext());
 
         return new org.example.dto.Response("Transaction history retrieved", 200, null, data);
+    }
+
+    @Transactional(readOnly = true)
+    public org.example.dto.Response getTransactionHistory(String accountNumber) {
+
+
+        // This query goes to the Read Replica
+        List<AccountLedger> data = ledgerRepository.findByAccountNumberOrderByCreatedAtDesc(accountNumber);
+
+        return new org.example.dto.Response("Transaction history retrieved", 200, null, Map.of("transactions", data));
     }
 
     private boolean verifyMpin(BankAccount account, String providedMpinHash) {

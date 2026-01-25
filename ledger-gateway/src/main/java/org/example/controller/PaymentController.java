@@ -10,6 +10,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import redis.clients.jedis.Jedis;
+import redis.clients.jedis.JedisPool;
 
 import java.math.BigDecimal;
 
@@ -25,10 +27,12 @@ public class PaymentController {
 
     private final PaymentInitiationService paymentService;
     private final UserRepository userRepository;
+    private final JedisPool pool;
 
-    public PaymentController(PaymentInitiationService paymentService, UserRepository userRepository) {
+    public PaymentController(PaymentInitiationService paymentService, UserRepository userRepository, JedisPool pool) {
         this.paymentService = paymentService;
         this.userRepository = userRepository;
+        this.pool = pool;
     }
 
     /**
@@ -52,6 +56,27 @@ public class PaymentController {
 
         // Get VPA from JWT attribute, or look up from database if not present
         String payerVpa = (String) req.getAttribute("vpa");
+
+        Jedis redis = pool.getResource();
+        if(redis == null){
+            return ResponseEntity.badRequest().body(
+                    TransactionResponse.builder()
+                            .status(org.example.enums.TransactionStatus.FAILED)
+                            .message("Redis error")
+                            .build()
+            );
+        }
+
+        if(redis.get("Ledger:vpa:" + payerVpa ) != null){
+            return ResponseEntity.badRequest().body(
+                    TransactionResponse.builder()
+                            .status(org.example.enums.TransactionStatus.FAILED)
+                            .message("Already your one payment is running")
+                            .build()
+            );
+        }
+
+        redis.set("Ledger:vpa:" + payerVpa, "true");
 
         if (payerVpa == null || payerVpa.isEmpty()) {
             // VPA not in JWT, look it up from database using userId
@@ -130,6 +155,7 @@ public class PaymentController {
                 request.wifiSsid(),
                 request.userAgent()
         );
+        redis.del("Ledger:vpa:" + payerVpa);
         // Return appropriate HTTP status based on transaction status
         return switch (response.getStatus()) {
             case SUCCESS ->

@@ -5,11 +5,9 @@ import org.springframework.transaction.annotation.Transactional;
 import org.example.dto.UserDeviceData;
 import org.example.dto.*;
 import org.example.model.Enums;
-import org.example.model.TempUser;
 import org.example.model.User;
 import org.example.model.UserDevice;
 import org.example.repository.DeviceRepository;
-import org.example.repository.TempUserRepo;
 import org.example.repository.UserRepository;
 import org.example.service.IAuth;
 import org.example.utils.CookieUtil;
@@ -21,6 +19,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
+import redis.clients.jedis.JedisPool;
 import software.amazon.awssdk.services.sns.SnsClient;
 import org.example.utils.SendOtpUtil;
 import java.security.SecureRandom;
@@ -39,10 +38,10 @@ public class AuthService implements IAuth {
     private UserRepository userRepo;
 
     @Autowired
-    private TempUserRepo tempUserRepo;
+    private DeviceRepository deviceRepository;
 
     @Autowired
-    private DeviceRepository deviceRepository;
+    private JedisPool pool;
 
     // ✅ RestTemplate initialized
     private final RestTemplate restTemplate = new RestTemplate();
@@ -106,7 +105,8 @@ public class AuthService implements IAuth {
         //1. get phono no
         String phoneNumber = req.getPhoneNumber();
         log.info("sendOtpToPhone started for phoneNumber={}", phoneNumber);
-        return SendOtpUtil.sendOtp(phoneNumber, secureRandom, tempUserRepo, snsClient);
+
+        return SendOtpUtil.sendOtp(phoneNumber, secureRandom, snsClient, pool.getResource(),"Ledger:"+ phoneNumber);
     }
 
     @Transactional
@@ -116,7 +116,7 @@ public class AuthService implements IAuth {
         String phoneNumber = req.getPhoneNumber();
         log.info("sendOtpToPhone started for phoneNumber={}", phoneNumber);
 
-        return SendOtpUtil.sendOtp(phoneNumber, secureRandom, tempUserRepo, snsClient);
+        return SendOtpUtil.sendOtp(phoneNumber, secureRandom, snsClient, pool.getResource(),"Ledger:"+ phoneNumber);
     }
 
     @Transactional
@@ -124,14 +124,15 @@ public class AuthService implements IAuth {
 
         //1. get user's entered data
         String phoneNumber = req.getPhoneNumber();
-        String otp = req.getOtp();
+        String userOtp = req.getOtp();
         log.info("checkOtpToPhone called for phoneNumber={}", phoneNumber);
 
         //2. check user's present or not
-        TempUser tempUser = tempUserRepo.findByPhoneNumber(phoneNumber);
+//        TempUser tempUser = tempUserRepo.findByPhoneNumber(phoneNumber);
+        String otp = pool.getResource().get("Ledger:" + phoneNumber);
 
         //3. verify via otp
-        if (tempUser != null && tempUser.getOtp().equals(otp)) {
+        if (otp != null && otp.equals(userOtp)) {
             log.info("OTP verified successfully for phoneNumber={}", phoneNumber);
 
             User user = new User();
@@ -139,7 +140,6 @@ public class AuthService implements IAuth {
             user.setKycStatus(Enums.KycStatus.APPROVED);
             userRepo.save(user);
 
-            tempUserRepo.delete(tempUser);
             log.info("TempUser deleted and User created. phoneNumber={}", phoneNumber);
 
             return new Response("OTP verified successfully", 200, null, null);
@@ -294,17 +294,17 @@ public class AuthService implements IAuth {
     public Response changingDevice(HttpServletResponse response, DeviceChangeReq req) {
         //1. get details
         String phoneNumber = req.getPhoneNumber();
-        String otp = req.getOtp();
+        String userOtp = req.getOtp();
+        log.info("Device change started. otp={}", userOtp);
         log.info("Device change OTP verification started. phoneNumber={}", phoneNumber);
 
         //2. check user's present or not
-        TempUser tempUser = tempUserRepo.findByPhoneNumber(phoneNumber);
+        String otp = pool.getResource().get("Ledger:"+ phoneNumber);
+        log.info("OTP from redis: {}", otp);
 
         //3. verify via otp
-        if (tempUser != null && tempUser.getOtp().equals(otp)) {
+        if (otp != null && otp.equals(userOtp)) {
             log.info("Device change OTP verified. phoneNumber={}", phoneNumber);
-
-            tempUserRepo.delete(tempUser);
 
             //4. get main user
             User user = userRepo.findByPhoneNumber(phoneNumber).orElse(null);
