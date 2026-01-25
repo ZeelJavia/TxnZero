@@ -12,6 +12,7 @@ import org.example.utils.PhoneNumberUtil;
 import org.example.utils.CryptoUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
@@ -23,10 +24,9 @@ import java.math.BigDecimal;
  * Core banking transaction service. Handles debit, credit, and reversal
  * operations with proper locking.
  *
- * Locking Strategy:
- * 1. PESSIMISTIC_WRITE lock on account row (via repository)
- * 2. @Version for optimistic locking as fallback
- * 3. SERIALIZABLE isolation for critical operations
+ * Locking Strategy: 1. PESSIMISTIC_WRITE lock on account row (via repository)
+ * 2. @Version for optimistic locking as fallback 3. SERIALIZABLE isolation for
+ * critical operations
  */
 @Service
 public class TransactionService {
@@ -36,15 +36,20 @@ public class TransactionService {
     private final AccountRepository accountRepository;
     private final LedgerRepository ledgerRepository;
 
+    // Optional - only available when kafka.enabled=true
+    private final PaymentNotificationProducer notificationProducer;
+
     public TransactionService(AccountRepository accountRepository,
-                              LedgerRepository ledgerRepository) {
+            LedgerRepository ledgerRepository,
+            @Autowired(required = false) PaymentNotificationProducer notificationProducer) {
         this.accountRepository = accountRepository;
         this.ledgerRepository = ledgerRepository;
+        this.notificationProducer = notificationProducer;
     }
 
     /**
-     * Debits amount from payer's account.
-     * ❌ WRITER: Critical Financial Op -> PRIMARY
+     * Debits amount from payer's account. ❌ WRITER: Critical Financial Op ->
+     * PRIMARY
      */
     @Transactional(isolation = Isolation.SERIALIZABLE)
     public TransactionResponse debit(PaymentRequest request, String accountNumber, BigDecimal riskScore) {
@@ -108,8 +113,19 @@ public class TransactionService {
             debitSms.setPhoneNumber(PhoneNumberUtil.setCode(account.getPhoneNumber()));
             debitSms.setAccountNumber(accountNumber);
 
-            log.info("DEBIT successful: txnId={}, newBalance={}", 
+            log.info("DEBIT successful: txnId={}, newBalance={}",
                     txnId, account.getCurrentBalance());
+
+            // 📢 Publish Kafka notification for sender (payment sent confirmation)
+            if (notificationProducer != null) {
+                notificationProducer.publishPaymentSent(
+                        txnId,
+                        request.getPayerVpa(),
+                        request.getPayeeVpa(),
+                        request.getAmount(),
+                        account.getCurrentBalance()
+                );
+            }
 
             return buildResponse(txnId, TransactionStatus.SUCCESS, "Debit successful", debitSms, null);
 
@@ -123,8 +139,8 @@ public class TransactionService {
     }
 
     /**
-     * Credits amount to payee's account.
-     * ❌ WRITER: Critical Financial Op -> PRIMARY
+     * Credits amount to payee's account. ❌ WRITER: Critical Financial Op ->
+     * PRIMARY
      */
     @Transactional(isolation = Isolation.SERIALIZABLE)
     public TransactionResponse credit(PaymentRequest request, String accountNumber, BigDecimal riskScore) {
@@ -173,10 +189,21 @@ public class TransactionService {
             creditSms.setPhoneNumber(PhoneNumberUtil.setCode(account.getPhoneNumber()));
             creditSms.setAccountNumber(accountNumber);
 
-            log.info("CREDIT successful: txnId={}, newBalance={}", 
+            log.info("CREDIT successful: txnId={}, newBalance={}",
                     txnId, account.getCurrentBalance());
 
-            return buildResponse(txnId, TransactionStatus.SUCCESS, "Credit successful",null, creditSms);
+            // 📢 Publish Kafka notification for receiver (payment received)
+            if (notificationProducer != null) {
+                notificationProducer.publishPaymentReceived(
+                        txnId,
+                        request.getPayeeVpa(),
+                        request.getPayerVpa(),
+                        request.getAmount(),
+                        account.getCurrentBalance()
+                );
+            }
+
+            return buildResponse(txnId, TransactionStatus.SUCCESS, "Credit successful", null, creditSms);
 
         } catch (ObjectOptimisticLockingFailureException e) {
             log.error("Concurrent modification detected for credit: txnId={}", txnId, e);
@@ -185,8 +212,7 @@ public class TransactionService {
     }
 
     /**
-     * Reverses a debit operation.
-     * ❌ WRITER: Critical Financial Op -> PRIMARY
+     * Reverses a debit operation. ❌ WRITER: Critical Financial Op -> PRIMARY
      */
     @Transactional(isolation = Isolation.SERIALIZABLE)
     public TransactionResponse reverseDebit(PaymentRequest request, String accountNumber) {
@@ -231,7 +257,7 @@ public class TransactionService {
             reversalSms.setPhoneNumber(PhoneNumberUtil.setCode(account.getPhoneNumber()));
             reversalSms.setAccountNumber(accountNumber);
 
-            log.info("REVERSAL successful: txnId={}, newBalance={}", 
+            log.info("REVERSAL successful: txnId={}, newBalance={}",
                     txnId, account.getCurrentBalance());
 
             return buildResponse(txnId, TransactionStatus.SUCCESS, "Reversal successful", reversalSms, null);
@@ -246,9 +272,9 @@ public class TransactionService {
      * Creates immutable ledger entry for audit trail.
      */
     private void createLedgerEntry(String txnId, String accountNumber, BigDecimal amount,
-                                   AccountLedger.LedgerDirection direction,
-                                   String counterpartyVpa, BigDecimal balanceAfter,
-                                   BigDecimal riskScore) {
+            AccountLedger.LedgerDirection direction,
+            String counterpartyVpa, BigDecimal balanceAfter,
+            BigDecimal riskScore) {
         AccountLedger entry = AccountLedger.builder()
                 .globalTxnId(txnId)
                 .accountNumber(accountNumber)
@@ -264,8 +290,8 @@ public class TransactionService {
     }
 
     /**
-     * Get account by account number (without lock).
-     * ✅ READ-ONLY: Simple Lookup -> REPLICA
+     * Get account by account number (without lock). ✅ READ-ONLY: Simple Lookup
+     * -> REPLICA
      */
     @Transactional(readOnly = true)
     public BankAccount getAccountByNumber(String accountNumber) {
@@ -273,8 +299,8 @@ public class TransactionService {
     }
 
     /**
-     * Get paginated transaction history for an account.
-     * ✅ READ-ONLY: Heavy History Query -> REPLICA
+     * Get paginated transaction history for an account. ✅ READ-ONLY: Heavy
+     * History Query -> REPLICA
      */
     @Transactional(readOnly = true)
     public org.example.dto.Response getTransactionHistory(String accountNumber, int page, int limit) {

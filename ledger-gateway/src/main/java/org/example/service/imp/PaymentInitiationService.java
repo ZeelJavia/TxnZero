@@ -1,10 +1,7 @@
 package org.example.service.imp;
 
 import org.example.client.SwitchClient;
-import org.example.dto.FraudCheckData;
-import org.example.dto.PaymentRequest;
-import org.example.dto.SmsNotificationTask;
-import org.example.dto.TransactionResponse;
+import org.example.dto.*;
 import org.example.enums.TransactionStatus;
 import org.example.model.Enums;
 import org.example.model.GatewayLog;
@@ -21,6 +18,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.Optional;
 import java.util.UUID;
@@ -42,18 +40,20 @@ public class PaymentInitiationService {
     private final GatewayLogRepository gatewayLogRepository;
     private final SwitchClient switchClient;
     private final SqsProducerService sqsProducerService;
+    private final PaymentNotificationProducer producer;
 
     public PaymentInitiationService(UserRepository userRepository,
                                     DeviceRepository deviceRepository,
                                     GatewayLogRepository gatewayLogRepository,
                                     SwitchClient switchClient,
-                                    SqsProducerService sqsProducerService
-                                    ) {
+                                    SqsProducerService sqsProducerService, PaymentNotificationProducer producer
+    ) {
         this.userRepository = userRepository;
         this.deviceRepository = deviceRepository;
         this.gatewayLogRepository = gatewayLogRepository;
         this.switchClient = switchClient;
         this.sqsProducerService = sqsProducerService;
+        this.producer = producer;
     }
 
     /**
@@ -164,6 +164,32 @@ public class PaymentInitiationService {
 
         sqsProducerService.queueSmsTask(creditSms);
         sqsProducerService.queueSmsTask(debitSms);
+
+        // Step 11: Push WebSocket notification via Kafka
+        PaymentNotificationEvent receiverEvent = PaymentNotificationEvent.builder()
+                .eventType(PaymentNotificationEvent.EventType.PAYMENT_RECEIVED)
+                .transactionId(txnId)
+                .receiverVpa(request.getPayeeVpa())
+                .senderVpa(request.getPayerVpa())
+                .senderName("Sender Name") // optional
+                .amount(request.getAmount())
+                .timestamp(Instant.parse(Instant.now().toString()))
+                .message("Received ₹" + request.getAmount() + " from " + request.getPayerVpa())
+                .build();
+
+        producer.publish(receiverEvent);
+
+        PaymentNotificationEvent senderEvent = PaymentNotificationEvent.builder()
+                .eventType(PaymentNotificationEvent.EventType.PAYMENT_SENT)
+                .transactionId(txnId)
+                .receiverVpa(request.getPayerVpa()) // IMPORTANT: receiverVpa = target user for WS
+                .senderVpa(request.getPayerVpa())
+                .amount(request.getAmount())
+                .timestamp(Instant.parse(Instant.now().toString()))
+                .message("Payment of ₹" + request.getAmount() + " sent to " + request.getPayeeVpa())
+                .build();
+
+        producer.publish(senderEvent);
 
         log.info("Payment result for txnId {}: {}", txnId, response.getStatus());
         return response;

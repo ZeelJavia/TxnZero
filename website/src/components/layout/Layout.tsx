@@ -69,6 +69,8 @@ export const Layout = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, clearAuth } = useAuthStore();
+  
+  // WebSocket is now initialized in ProtectedRoute to stay connected across all pages
 
   const handleLogout = () => {
     clearAuth();

@@ -67,7 +67,7 @@ public class AccountLinkService {
 
     // ✅ READ-ONLY: Checking account existence -> REPLICA
     // (Note: Sending OTP is an SNS call, not a DB write)
-    @Transactional(readOnly = true)
+    @Transactional
     public Response sendOtpToPhoneNumber(HttpServletRequest httpServletRequest, BankHandlerReq req) {
         //1. get phoneNumber
         String phoneNumber = httpServletRequest.getAttribute("phoneNumber").toString();
