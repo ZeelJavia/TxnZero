@@ -1,6 +1,8 @@
 package org.example.controller;
 
 import jakarta.servlet.http.HttpServletRequest;
+import org.example.dto.GraphRAGReq;
+import org.example.dto.Response;
 import org.example.dto.TransactionResponse;
 import org.example.model.User;
 import org.example.repository.UserRepository;
@@ -160,6 +162,14 @@ public class PaymentController {
                         "txnId", txnId,
                         "message", "Status lookup not implemented yet"
                 ));
+    }
+
+    /**
+     * graph rag call
+     */
+    @PostMapping("/graph-rag")
+    public Response callGraphRAG(@RequestBody GraphRAGReq ragReq){
+        return paymentService.callGraphRAG(ragReq);
     }
 
     // --- Request DTO ---

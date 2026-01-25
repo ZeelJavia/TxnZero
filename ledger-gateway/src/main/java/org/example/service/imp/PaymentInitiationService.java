@@ -1,10 +1,7 @@
 package org.example.service.imp;
 
 import org.example.client.SwitchClient;
-import org.example.dto.FraudCheckData;
-import org.example.dto.PaymentRequest;
-import org.example.dto.SmsNotificationTask;
-import org.example.dto.TransactionResponse;
+import org.example.dto.*;
 import org.example.enums.TransactionStatus;
 import org.example.model.Enums;
 import org.example.model.GatewayLog;
@@ -19,9 +16,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.client.RestTemplate;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -42,18 +41,20 @@ public class PaymentInitiationService {
     private final GatewayLogRepository gatewayLogRepository;
     private final SwitchClient switchClient;
     private final SqsProducerService sqsProducerService;
+    private final RestTemplate restTemplate;
 
     public PaymentInitiationService(UserRepository userRepository,
                                     DeviceRepository deviceRepository,
                                     GatewayLogRepository gatewayLogRepository,
                                     SwitchClient switchClient,
-                                    SqsProducerService sqsProducerService
-                                    ) {
+                                    SqsProducerService sqsProducerService, RestTemplate restTemplate
+    ) {
         this.userRepository = userRepository;
         this.deviceRepository = deviceRepository;
         this.gatewayLogRepository = gatewayLogRepository;
         this.switchClient = switchClient;
         this.sqsProducerService = sqsProducerService;
+        this.restTemplate = restTemplate;
     }
 
     /**
@@ -169,6 +170,26 @@ public class PaymentInitiationService {
         return response;
     }
 
+    public Response callGraphRAG(GraphRAGReq req){
+
+        String url = "http://localhost:8000/investigate/generate-report";
+
+        try {
+            Map<String, Object> apiResponse =
+                    restTemplate.postForObject(url, req, Map.class);
+
+            return new Response(
+                    "Graph RAG investigation completed",
+                    200,
+                    null,
+                    apiResponse   // 👈 setting API data here
+            );
+        } catch (Exception e) {
+            // basic exception handling (can be improved later)
+            return new Response("FAILED",400, e.getMessage(), null);
+        }
+    }
+
     /**
      * Generates a unique transaction ID.
      * Format: TXN_<timestamp>_<uuid>
@@ -188,6 +209,8 @@ public class PaymentInitiationService {
         long txnCount = gatewayLogRepository.countByDeviceIdAndTimestampAfter(deviceId, oneMinuteAgo);
         return txnCount >= MAX_TXN_PER_MINUTE;
     }
+
+
 
     /**
      * Saves transaction log for audit and ML analysis.
