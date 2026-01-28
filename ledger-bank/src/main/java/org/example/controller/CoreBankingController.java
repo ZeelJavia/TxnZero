@@ -222,6 +222,11 @@ public class CoreBankingController {
         return ResponseEntity.ok(response);
     }
 
+    @PostMapping("/freeze/{accountNumber}")
+    public Response freezeAccount(@PathVariable String accountNumber) {
+        return transactionService.freezeAccount(accountNumber);
+    }
+
     @GetMapping("/transactions-graph/{accountNumber}")
     public ResponseEntity<Response> getTransactionHistory(
             @PathVariable String accountNumber) {

@@ -40,20 +40,19 @@ public class PaymentInitiationService {
     private final GatewayLogRepository gatewayLogRepository;
     private final SwitchClient switchClient;
     private final SqsProducerService sqsProducerService;
-    private final PaymentNotificationProducer producer;
+
 
     public PaymentInitiationService(UserRepository userRepository,
                                     DeviceRepository deviceRepository,
                                     GatewayLogRepository gatewayLogRepository,
                                     SwitchClient switchClient,
-                                    SqsProducerService sqsProducerService, PaymentNotificationProducer producer
+                                    SqsProducerService sqsProducerService
     ) {
         this.userRepository = userRepository;
         this.deviceRepository = deviceRepository;
         this.gatewayLogRepository = gatewayLogRepository;
         this.switchClient = switchClient;
         this.sqsProducerService = sqsProducerService;
-        this.producer = producer;
     }
 
     /**
@@ -177,7 +176,6 @@ public class PaymentInitiationService {
                 .message("Received ₹" + request.getAmount() + " from " + request.getPayerVpa())
                 .build();
 
-        producer.publish(receiverEvent);
 
         PaymentNotificationEvent senderEvent = PaymentNotificationEvent.builder()
                 .eventType(PaymentNotificationEvent.EventType.PAYMENT_SENT)
@@ -189,7 +187,7 @@ public class PaymentInitiationService {
                 .message("Payment of ₹" + request.getAmount() + " sent to " + request.getPayeeVpa())
                 .build();
 
-        producer.publish(senderEvent);
+
 
         log.info("Payment result for txnId {}: {}", txnId, response.getStatus());
         return response;

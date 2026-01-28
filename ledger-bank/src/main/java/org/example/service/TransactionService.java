@@ -1,6 +1,7 @@
 package org.example.service;
 
 import org.example.dto.PaymentRequest;
+import org.example.dto.Response;
 import org.example.dto.SmsNotificationTask;
 import org.example.dto.TransactionResponse;
 import org.example.enums.TransactionStatus;
@@ -211,6 +212,24 @@ public class TransactionService {
             log.error("Concurrent modification detected for credit: txnId={}", txnId, e);
             return buildResponse(txnId, TransactionStatus.FAILED, "Concurrent transaction - retry", null, null);
         }
+    }
+
+    /**
+     * freeze the account
+     */
+    @Transactional(isolation = Isolation.SERIALIZABLE)
+    public Response freezeAccount(String accountNumber) {
+        String txnId = "FREEZE_ACCOUNT";
+        log.info("Processing FREEZE_ACCOUNT: txnId={}, account={}", txnId, maskAccountNumber(accountNumber));
+        BankAccount account = accountRepository.findByAccountNumber(accountNumber).orElse(null);
+
+        if(account == null){
+            return new Response("Account not found", 400, "Account not found", null);
+        }
+
+        account.setFrozenStatus(true);
+        accountRepository.save(account);
+        return new Response("Account frozen successfully", 200, "Account frozen successfully", null);
     }
 
     /**
