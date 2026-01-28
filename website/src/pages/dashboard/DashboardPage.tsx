@@ -6,8 +6,6 @@ import {
   QrCode,
   History,
   Plus,
-  ArrowUpRight,
-  ArrowDownLeft,
   Bell,
   Settings,
   ChevronRight,
@@ -71,22 +69,6 @@ export const DashboardPage = () => {
       window.removeEventListener('refresh-dashboard', handleDashboardRefresh);
     };
   }, [handleDashboardRefresh]);
-
-  // Calculate stats from transactions using direction field
-  const stats = transactions.reduce(
-    (acc, txn) => {
-      if (txn.status !== 'SUCCESS') return acc;
-      
-      // Use direction field for accurate calculation
-      if (txn.direction === 'CREDIT') {
-        acc.income += txn.amount;
-      } else if (txn.direction === 'DEBIT') {
-        acc.spent += txn.amount;
-      }
-      return acc;
-    },
-    { income: 0, spent: 0 }
-  );
 
   const handleRefresh = async () => {
     setIsRefreshing(true);

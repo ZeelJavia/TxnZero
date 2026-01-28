@@ -6,10 +6,16 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowDownLeft, ArrowUpRight, X, AlertCircle, RotateCcw } from 'lucide-react';
 import { useAuthStore, useAccountStore } from '../store';
 
-// WebSocket URL - use relative path to go through Vite proxy (handles HTTP/HTTPS)
+// WebSocket URL configuration
+// In development: uses Vite proxy (relative path)
+// In production: uses VITE_WS_URL or falls back to same origin
 const getWsUrl = () => {
-  // Use relative path so Vite proxy handles the connection
-  // This works for both HTTP and HTTPS since the proxy handles it
+  // If VITE_WS_URL is set (production), use it
+  const wsUrl = import.meta.env.VITE_WS_URL;
+  if (wsUrl) {
+    return wsUrl;
+  }
+  // Otherwise use relative path (development with Vite proxy)
   return `${window.location.origin}/ws/notifications`;
 };
 
