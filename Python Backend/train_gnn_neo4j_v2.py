@@ -3,17 +3,18 @@ import torch.nn.functional as F
 from neo4j import GraphDatabase
 from torch_geometric.data import Data
 from torch_geometric.nn import SAGEConv
+from torch_geometric.utils import to_undirected
 from sklearn.preprocessing import StandardScaler, LabelEncoder
 from sklearn.model_selection import train_test_split
+from sklearn.metrics import classification_report, confusion_matrix, roc_auc_score
 import pandas as pd
 import numpy as np
 from dotenv import load_dotenv
 import os
 
+# --- CONFIGURATION ---
 load_dotenv()
 password = os.getenv("password")
-
-# --- CONFIGURATION ---
 NEO4J_URI = "bolt://localhost:7687"
 NEO4J_AUTH = ("neo4j", password)
 
@@ -39,7 +40,13 @@ class GraphDatasetLoader:
                    u.isFraud as label
             """
             nodes_result = session.run(query_nodes)
-            nodes_df = pd.DataFrame([r.data() for r in nodes_result])
+            data = [r.data() for r in nodes_result]
+            
+            # 🚨 SAFETY CHECK 🚨
+            if not data:
+                return pd.DataFrame(), pd.DataFrame()
+
+            nodes_df = pd.DataFrame(data)
 
             # 2. FETCH MONEY EDGES (Transaction Topology)
             print("   Fetching Transaction Edges...")
@@ -51,9 +58,8 @@ class GraphDatasetLoader:
             edges_result = session.run(query_edges)
             txns_df = pd.DataFrame([r.data() for r in edges_result])
 
-            # 3. 🚀 NEW: FETCH SHARED DEVICE EDGES (Virtual Topology)
+            # 3. FETCH SHARED DEVICE EDGES (Virtual Topology)
             # Logic: If User A and User B used the same device, link them!
-            # This creates a "Clique" (dense cluster) for Mule Rings.
             print("   Fetching Shared Device Edges (The 'Spider Web')...")
             query_devices = """
             MATCH (u1:User)-[:USED_DEVICE]->(d:Device)<-[:USED_DEVICE]-(u2:User)
@@ -64,14 +70,17 @@ class GraphDatasetLoader:
             devices_df = pd.DataFrame([r.data() for r in devices_result])
 
             # 4. MERGE THE GRAPHS
-            # The GNN now sees "Who you pay" AND "Who you share phones with"
             print(f"   -> Found {len(txns_df)} Txn Links and {len(devices_df)} Device Links")
             
-            # Combine both dataframes
-            if not devices_df.empty:
-                full_edges_df = pd.concat([txns_df, devices_df], ignore_index=True)
+            # Combine both dataframes safely
+            frames = []
+            if not txns_df.empty: frames.append(txns_df)
+            if not devices_df.empty: frames.append(devices_df)
+            
+            if frames:
+                full_edges_df = pd.concat(frames, ignore_index=True)
             else:
-                full_edges_df = txns_df
+                full_edges_df = pd.DataFrame(columns=['source', 'target'])
             
             return nodes_df, full_edges_df
 
@@ -81,6 +90,12 @@ class GraphDatasetLoader:
 loader = GraphDatasetLoader(NEO4J_URI, NEO4J_AUTH)
 nodes_df, edges_df = loader.fetch_graph_data()
 loader.close()
+
+# 🚨 CRITICAL CHECK 🚨
+if nodes_df.empty:
+    print("\n❌ STOPPING: No data found in Neo4j.")
+    print("   Please run the Sync Service (POST /sync/all) to populate the graph.")
+    exit()
 
 print(f"   Loaded {len(nodes_df)} Nodes and {len(edges_df)} Total Edges.")
 
@@ -94,7 +109,7 @@ nodes_df['kyc_status'] = nodes_df['kyc_status'].fillna('PENDING')
 nodes_df['label'] = nodes_df['label'].fillna(0).astype(int)
 
 le = LabelEncoder()
-nodes_df['kyc_encoded'] = le.fit_transform(nodes_df['kyc_status'])
+nodes_df['kyc_encoded'] = le.fit_transform(nodes_df['kyc_status'].astype(str))
 
 scaler = StandardScaler()
 node_features = scaler.fit_transform(nodes_df[['risk_score', 'kyc_encoded']])
@@ -103,23 +118,24 @@ x = torch.tensor(node_features, dtype=torch.float)
 y = torch.tensor(nodes_df['label'].values, dtype=torch.long)
 
 # --- B. EDGE INDEX ---
+# Map User IDs (Strings) to Indices (0, 1, 2...)
 uuid_to_idx = {uuid: idx for idx, uuid in enumerate(nodes_df['user_id'])}
 
 valid_edges = []
-for _, row in edges_df.iterrows():
-    if row['source'] in uuid_to_idx and row['target'] in uuid_to_idx:
-        src_idx = uuid_to_idx[row['source']]
-        dst_idx = uuid_to_idx[row['target']]
-        valid_edges.append([src_idx, dst_idx])
+if not edges_df.empty:
+    for _, row in edges_df.iterrows():
+        if row['source'] in uuid_to_idx and row['target'] in uuid_to_idx:
+            src_idx = uuid_to_idx[row['source']]
+            dst_idx = uuid_to_idx[row['target']]
+            valid_edges.append([src_idx, dst_idx])
 
-# Create the tensor
-edge_index = torch.tensor(valid_edges, dtype=torch.long).t().contiguous()
+if not valid_edges:
+    print("⚠️ WARNING: No valid edges connected known users. Graph will be disconnected.")
+    edge_index = torch.empty((2, 0), dtype=torch.long)
+else:
+    edge_index = torch.tensor(valid_edges, dtype=torch.long).t().contiguous()
 
-# 🚀 IMPROVEMENT: Make graph undirected (or bidirectional) 
-# because shared devices imply a mutual relationship.
-# This ensures information flows from Mule A -> Mule B and Mule B -> Mule A
-# (PyG utility to add reverse edges automatically)
-from torch_geometric.utils import to_undirected
+# 🚀 IMPROVEMENT: Make graph undirected (bidirectional information flow)
 edge_index = to_undirected(edge_index)
 
 print(f"   Graph Constructed. Input Features: {x.shape[1]}")
@@ -128,7 +144,12 @@ print(f"   Graph Constructed. Input Features: {x.shape[1]}")
 # 3. SPLIT DATA
 # ==========================================
 indices = range(len(nodes_df))
-train_idx, test_idx = train_test_split(indices, test_size=0.2, stratify=y)
+
+# Handle small datasets gracefully
+if len(nodes_df) > 5:
+    train_idx, test_idx = train_test_split(indices, test_size=0.2, stratify=y, random_state=42)
+else:
+    train_idx, test_idx = indices, indices
 
 train_mask = torch.zeros(len(nodes_df), dtype=torch.bool)
 test_mask = torch.zeros(len(nodes_df), dtype=torch.bool)
@@ -163,7 +184,9 @@ optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
 # Handle Class Imbalance
 fraud_count = y.sum().item()
 if fraud_count > 0:
-    weight = torch.tensor([1.0, (len(y) - fraud_count) / fraud_count], dtype=torch.float)
+    weight_val = (len(y) - fraud_count) / fraud_count
+    weight = torch.tensor([1.0, weight_val], dtype=torch.float)
+    print(f"   Class Weight Applied: {weight_val:.2f} (Fraud is rare)")
 else:
     weight = torch.tensor([1.0, 1.0])
 
@@ -190,10 +213,13 @@ for epoch in range(201):
         pred = out.argmax(dim=1)
         
         fraud_mask_test = test_mask & (y == 1)
-        correct_fraud = (pred[fraud_mask_test] == y[fraud_mask_test]).sum()
-        total_fraud = fraud_mask_test.sum()
+        total_fraud = fraud_mask_test.sum().item()
         
-        recall = int(correct_fraud) / int(total_fraud) if total_fraud > 0 else 0.0
+        if total_fraud > 0:
+            correct_fraud = (pred[fraud_mask_test] == y[fraud_mask_test]).sum().item()
+            recall = correct_fraud / total_fraud
+        else:
+            recall = 0.0
         
         if recall > best_recall: best_recall = recall
         print(f'Epoch {epoch:03d}: Loss: {loss:.4f}, Fraud Recall: {recall:.4f}')
@@ -206,3 +232,46 @@ print(f"\n✅ Best Recall Achieved: {best_recall:.4f}")
 print("\n💾 Saving Model...")
 torch.save(model.state_dict(), "fraud_gnn_model_neo4j_v2.pth")
 print("✅ Model Trained & Saved!")
+
+# ==========================================
+# 7. EVALUATION REPORT (UPDATED)
+# ==========================================
+print("\n📊 --- FINAL MODEL EVALUATION ---")
+model.eval()
+
+# 1. Get Predictions on Test Set
+with torch.no_grad():
+    out = model(x, edge_index)
+    # Get probabilities for class 1 (Fraud)
+    probs = torch.exp(out)[test_mask][:, 1].cpu().numpy()
+    # Get predicted class (0 or 1)
+    preds = out.argmax(dim=1)[test_mask].cpu().numpy()
+    # Get actual labels
+    y_true = y[test_mask].cpu().numpy()
+
+# Only run report if we have classes in test set
+if len(np.unique(y_true)) > 1:
+    # 2. Print Classification Report (Precision, Recall, F1)
+    print("\nClassification Report:")
+    print(classification_report(y_true, preds, target_names=['Legit', 'Fraud']))
+
+    # 3. Calculate AUC-ROC
+    try:
+        auc = roc_auc_score(y_true, probs)
+        print(f"⭐ AUC-ROC Score: {auc:.4f}")
+        if auc > 0.9: print("   Interpretation: Excellent discrimination.")
+        elif auc > 0.8: print("   Interpretation: Good discrimination.")
+        else: print("   Interpretation: Needs improvement.")
+    except ValueError:
+        print("⚠️ AUC-ROC skipped (Only one class present in test set)")
+
+    # 4. Generate Confusion Matrix
+    conf_matrix = confusion_matrix(y_true, preds)
+    print("\nConfusion Matrix:")
+    print(f"True Negatives (Legit Correct): {conf_matrix[0][0]}")
+    print(f"False Positives (Legit -> Fraud): {conf_matrix[0][1]} (User Friction)")
+    print(f"False Negatives (Fraud -> Legit): {conf_matrix[1][0]} (Missed Fraud)")
+    print(f"True Positives (Fraud Correct): {conf_matrix[1][1]}")
+
+else:
+    print("⚠️ Test set contains only one class. Cannot calculate AUC/Confusion Matrix.")

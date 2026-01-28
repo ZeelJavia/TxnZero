@@ -1,8 +1,10 @@
 package org.example.service.imp;
 
 import org.example.client.SwitchClient;
-import org.example.dto.*;
-import org.example.dto.*;
+import org.example.dto.FraudCheckData;
+import org.example.dto.PaymentRequest;
+import org.example.dto.SmsNotificationTask;
+import org.example.dto.TransactionResponse;
 import org.example.enums.TransactionStatus;
 import org.example.model.Enums;
 import org.example.model.GatewayLog;
@@ -11,6 +13,7 @@ import org.example.model.UserDevice;
 import org.example.repository.DeviceRepository;
 import org.example.repository.GatewayLogRepository;
 import org.example.repository.UserRepository;
+import org.example.utils.CryptoUtil;
 import org.example.utils.MaskingUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -18,7 +21,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.Optional;
 import java.util.UUID;
@@ -40,14 +42,21 @@ public class PaymentInitiationService {
     private final GatewayLogRepository gatewayLogRepository;
     private final SwitchClient switchClient;
     private final SqsProducerService sqsProducerService;
+<<<<<<< HEAD
 
+=======
+>>>>>>> 7731f5a0bc10846e8e198c41c5058cb6ab5bb238
 
     public PaymentInitiationService(UserRepository userRepository,
                                     DeviceRepository deviceRepository,
                                     GatewayLogRepository gatewayLogRepository,
                                     SwitchClient switchClient,
                                     SqsProducerService sqsProducerService
+<<<<<<< HEAD
     ) {
+=======
+                                    ) {
+>>>>>>> 7731f5a0bc10846e8e198c41c5058cb6ab5bb238
         this.userRepository = userRepository;
         this.deviceRepository = deviceRepository;
         this.gatewayLogRepository = gatewayLogRepository;
@@ -164,6 +173,7 @@ public class PaymentInitiationService {
         sqsProducerService.queueSmsTask(creditSms);
         sqsProducerService.queueSmsTask(debitSms);
 
+<<<<<<< HEAD
         // Step 11: Push WebSocket notification via Kafka
         PaymentNotificationEvent receiverEvent = PaymentNotificationEvent.builder()
                 .eventType(PaymentNotificationEvent.EventType.PAYMENT_RECEIVED)
@@ -189,6 +199,8 @@ public class PaymentInitiationService {
 
 
 
+=======
+>>>>>>> 7731f5a0bc10846e8e198c41c5058cb6ab5bb238
         log.info("Payment result for txnId {}: {}", txnId, response.getStatus());
         return response;
     }

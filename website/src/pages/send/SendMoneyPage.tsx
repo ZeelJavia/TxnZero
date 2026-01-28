@@ -14,10 +14,11 @@ import {
   Clock,
   AlertTriangle,
   Sparkles,
+  Loader2,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { Button, Input, Card, MpinInput, ProcessingLoader } from '../../components/ui';
-import { paymentApi } from '../../services/api';
+import api, { paymentApi } from '../../services/api';
 import { useAuthStore, useAccountStore } from '../../store';
 import { formatCurrency, validateVpa, cn } from '../../utils';
 import type { TransactionResponse, TransactionStatus } from '../../types';
@@ -27,6 +28,13 @@ import type { TransactionResponse, TransactionStatus } from '../../types';
 // ============================================
 
 type SendStep = 'recipient' | 'amount' | 'confirm' | 'mpin' | 'processing' | 'result';
+
+interface ForensicReport {
+  verdict?: string;
+  pattern?: string;
+  explanation?: string;
+  raw?: string;
+}
 
 export const SendMoneyPage = () => {
   const navigate = useNavigate();
@@ -51,6 +59,8 @@ export const SendMoneyPage = () => {
 
   // Result
   const [transactionResult, setTransactionResult] = useState<TransactionResponse | null>(null);
+  const [forensicReport, setForensicReport] = useState<ForensicReport | null>(null);
+  const [isLoadingForensic, setIsLoadingForensic] = useState(false);
 
   // Errors
   const [vpaError, setVpaError] = useState('');
@@ -125,6 +135,75 @@ export const SendMoneyPage = () => {
     setStep('mpin');
   };
 
+  // Parse forensic report from text format
+  const parseForensicReport = (reportText: string): ForensicReport => {
+    const report: ForensicReport = { raw: reportText };
+
+    try {
+      // Extract Verdict
+      const verdictMatch = reportText.match(/\*\*Verdict:\*\*\s*(.+?)(?:\n|$)/);
+      if (verdictMatch) {
+        report.verdict = verdictMatch[1].trim();
+      }
+
+      // Extract Pattern
+      const patternMatch = reportText.match(/\*\*Pattern Detected:\*\*\s*(.+?)(?:\n|$)/);
+      if (patternMatch) {
+        report.pattern = patternMatch[1].trim();
+      }
+
+      // Extract Explanation
+      const explanationMatch = reportText.match(/\*\*Explanation:\*\*\s*(.+?)$/s);
+      if (explanationMatch) {
+        report.explanation = explanationMatch[1].trim();
+      }
+    } catch (error) {
+      console.error('Error parsing forensic report:', error);
+    }
+
+    return report;
+  };
+
+  // Fetch forensic report independently
+  const fetchForensicReport = async (txnId: string, txnAmount: number) => {
+    setIsLoadingForensic(true);
+    try {
+      const response = await api('/api/payments/graph-rag', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        data: {
+          txnId,
+          amount: txnAmount,
+          payerVpa: defaultVpa || '',
+          payeeVpa: recipientVpa,
+        }
+      });
+
+      console.log('Graph RAG Response:', response.data); // Debug log
+
+      if (response.status >= 200 && response.status < 300) {
+        // Response structure: { data: { forensic_report, status, txnId }, message, statusCode }
+        const responseData = response.data;
+        const forensicData = responseData.data || responseData;
+        
+        // Parse the forensic report
+        if (forensicData.forensic_report) {
+          console.log('Forensic Report Text:', forensicData.forensic_report); // Debug log
+          const parsed = parseForensicReport(forensicData.forensic_report);
+          console.log('Parsed Report:', parsed); // Debug log
+          setForensicReport(parsed);
+        } else {
+          setForensicReport({ raw: 'No forensic report available' });
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching forensic report:', error);
+      setForensicReport({ raw: 'Failed to fetch forensic report' });
+    } finally {
+      setIsLoadingForensic(false);
+    }
+  };
+
   // Initiate payment - Optimized for low latency
   const handleInitiatePayment = async () => {
     if (mpin.length !== 4 && mpin.length !== 6) {
@@ -173,7 +252,7 @@ export const SendMoneyPage = () => {
       const txnResponse = response.data;
       
       const txnId = txnResponse.txnId || '';
-      setTransactionResult({
+      const transactionResult = {
         txnId,
         transactionId: txnId,
         status: txnResponse.status as TransactionStatus,
@@ -181,8 +260,17 @@ export const SendMoneyPage = () => {
         amount: parseFloat(amount),
         timestamp: new Date().toISOString(),
         riskScore: txnResponse.riskScore,
-      });
+      };
+
+      // Set transaction result and move to result screen immediately
+      setTransactionResult(transactionResult);
       setStep('result');
+
+      // Fetch forensic report in the background (non-blocking)
+      if (txnId) {
+        fetchForensicReport(txnId, parseFloat(amount));
+      }
+
     } catch (error: any) {
       const errorMessage = error.response?.data?.message || 
                           error.response?.data?.error ||
@@ -277,9 +365,12 @@ export const SendMoneyPage = () => {
           <ResultStep
             result={transactionResult!}
             recipientName={recipientName}
+            forensicReport={forensicReport}
+            isLoadingForensic={isLoadingForensic}
             onDone={() => navigate('/dashboard')}
             onRetry={() => {
               setMpin('');
+              setForensicReport(null);
               setStep('mpin');
             }}
           />
@@ -616,12 +707,22 @@ const ProcessingStep = ({ amount }: ProcessingStepProps) => {
 interface ResultStepProps {
   result: TransactionResponse;
   recipientName: string;
+  forensicReport: ForensicReport | null;
+  isLoadingForensic: boolean;
   onDone: () => void;
   onRetry: () => void;
 }
 
-const ResultStep = ({ result, recipientName, onDone, onRetry }: ResultStepProps) => {
+const ResultStep = ({ result, recipientName, forensicReport, isLoadingForensic, onDone, onRetry }: ResultStepProps) => {
   const isSuccess = result.status === 'SUCCESS';
+
+  const getVerdictColor = (verdict?: string) => {
+    if (!verdict) return 'text-slate-400';
+    const lower = verdict.toLowerCase();
+    if (lower.includes('illegal') || lower.includes('suspicious')) return 'text-danger-400';
+    if (lower.includes('legal') || lower.includes('normal')) return 'text-success-400';
+    return 'text-amber-400';
+  };
 
   return (
     <div className="min-h-[80vh] flex flex-col items-center justify-center space-y-8 py-8">
@@ -670,11 +771,12 @@ const ResultStep = ({ result, recipientName, onDone, onRetry }: ResultStepProps)
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.5 }}
+          className="w-full max-w-md"
         >
-          <Card className="p-4 space-y-3 min-w-[280px]">
+          <Card className="p-4 space-y-3">
             <div className="flex justify-between text-sm">
               <span className="text-slate-400">Transaction ID</span>
-              <span className="text-white font-mono">{result.transactionId.slice(0, 16)}...</span>
+              <span className="text-white font-mono text-xs">{result.transactionId.slice(0, 20)}...</span>
             </div>
             {result.timestamp && (
               <div className="flex justify-between text-sm">
@@ -696,11 +798,77 @@ const ResultStep = ({ result, recipientName, onDone, onRetry }: ResultStepProps)
         </motion.div>
       )}
 
+      {/* Forensic Report */}
+      {isSuccess && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.6 }}
+          className="w-full max-w-md"
+        >
+          <Card className="p-5 space-y-4">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-amber-400" />
+              <h3 className="text-lg font-bold text-white">Forensic Analysis</h3>
+            </div>
+
+            {isLoadingForensic ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="w-6 h-6 text-primary-400 animate-spin" />
+                <span className="ml-3 text-slate-400">Analyzing transaction...</span>
+              </div>
+            ) : forensicReport ? (
+              <div className="space-y-3">
+                {forensicReport.verdict && (
+                  <div className="p-3 rounded-lg bg-slate-800/50">
+                    <span className="text-xs text-slate-400 block mb-1">Verdict</span>
+                    <span className={cn('text-base font-semibold', getVerdictColor(forensicReport.verdict))}>
+                      {forensicReport.verdict}
+                    </span>
+                  </div>
+                )}
+                
+                {forensicReport.pattern && (
+                  <div className="p-3 rounded-lg bg-slate-800/50">
+                    <span className="text-xs text-slate-400 block mb-1">Pattern Detected</span>
+                    <span className="text-base font-medium text-white">
+                      {forensicReport.pattern}
+                    </span>
+                  </div>
+                )}
+                
+                {forensicReport.explanation && (
+                  <div className="p-3 rounded-lg bg-slate-800/50">
+                    <span className="text-xs text-slate-400 block mb-1">Explanation</span>
+                    <p className="text-sm text-slate-300 leading-relaxed">
+                      {forensicReport.explanation}
+                    </p>
+                  </div>
+                )}
+
+                {/* Show raw if parsing didn't extract anything */}
+                {!forensicReport.verdict && !forensicReport.pattern && !forensicReport.explanation && forensicReport.raw && (
+                  <div className="p-3 rounded-lg bg-slate-800/50">
+                    <p className="text-sm text-slate-300 whitespace-pre-wrap">
+                      {forensicReport.raw}
+                    </p>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p className="text-sm text-slate-400 text-center py-4">
+                No forensic data available
+              </p>
+            )}
+          </Card>
+        </motion.div>
+      )}
+
       {/* Actions */}
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-        transition={{ delay: 0.6 }}
+        transition={{ delay: 0.7 }}
         className="w-full max-w-xs space-y-3"
       >
         {isSuccess ? (
