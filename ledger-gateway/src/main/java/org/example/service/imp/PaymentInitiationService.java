@@ -42,13 +42,21 @@ public class PaymentInitiationService {
     private final GatewayLogRepository gatewayLogRepository;
     private final SwitchClient switchClient;
     private final SqsProducerService sqsProducerService;
+<<<<<<< HEAD
+
+=======
+>>>>>>> 7731f5a0bc10846e8e198c41c5058cb6ab5bb238
 
     public PaymentInitiationService(UserRepository userRepository,
                                     DeviceRepository deviceRepository,
                                     GatewayLogRepository gatewayLogRepository,
                                     SwitchClient switchClient,
                                     SqsProducerService sqsProducerService
+<<<<<<< HEAD
+    ) {
+=======
                                     ) {
+>>>>>>> 7731f5a0bc10846e8e198c41c5058cb6ab5bb238
         this.userRepository = userRepository;
         this.deviceRepository = deviceRepository;
         this.gatewayLogRepository = gatewayLogRepository;
@@ -165,6 +173,34 @@ public class PaymentInitiationService {
         sqsProducerService.queueSmsTask(creditSms);
         sqsProducerService.queueSmsTask(debitSms);
 
+<<<<<<< HEAD
+        // Step 11: Push WebSocket notification via Kafka
+        PaymentNotificationEvent receiverEvent = PaymentNotificationEvent.builder()
+                .eventType(PaymentNotificationEvent.EventType.PAYMENT_RECEIVED)
+                .transactionId(txnId)
+                .receiverVpa(request.getPayeeVpa())
+                .senderVpa(request.getPayerVpa())
+                .senderName("Sender Name") // optional
+                .amount(request.getAmount())
+                .timestamp(Instant.parse(Instant.now().toString()))
+                .message("Received ₹" + request.getAmount() + " from " + request.getPayerVpa())
+                .build();
+
+
+        PaymentNotificationEvent senderEvent = PaymentNotificationEvent.builder()
+                .eventType(PaymentNotificationEvent.EventType.PAYMENT_SENT)
+                .transactionId(txnId)
+                .receiverVpa(request.getPayerVpa()) // IMPORTANT: receiverVpa = target user for WS
+                .senderVpa(request.getPayerVpa())
+                .amount(request.getAmount())
+                .timestamp(Instant.parse(Instant.now().toString()))
+                .message("Payment of ₹" + request.getAmount() + " sent to " + request.getPayeeVpa())
+                .build();
+
+
+
+=======
+>>>>>>> 7731f5a0bc10846e8e198c41c5058cb6ab5bb238
         log.info("Payment result for txnId {}: {}", txnId, response.getStatus());
         return response;
     }

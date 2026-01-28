@@ -102,6 +102,10 @@ public class RouterService {
             // 🔄 FEEDBACK LOOP: Update Redis immediately so RL knows this user was Blocked
             triggerPostTransactionActions(request.getPayerVpa(), riskScore, false);
 
+
+            //set account is fronzen
+            bankClient.setAccountFrozen(payerBank, payerAccountNumber, true);
+
             return buildBlockedResponse(txnId, "Transaction blocked: High risk detected", riskScore);
         }
 
