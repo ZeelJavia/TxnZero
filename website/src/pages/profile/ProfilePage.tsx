@@ -1,11 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   ArrowLeft,
-  User,
   Phone,
-  Mail,
   CreditCard,
   Shield,
   LogOut,
@@ -15,15 +13,13 @@ import {
   Lock,
   HelpCircle,
   FileText,
-  Settings,
   Smartphone,
-  Building2,
   Copy,
   CheckCircle2,
   Edit,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { Card, Button, ConfirmDialog } from '../../components/ui';
+import { Card, ConfirmDialog } from '../../components/ui';
 import { useAuthStore, useAccountStore } from '../../store';
 import { authApi } from '../../services/api';
 import { cn } from '../../utils';
@@ -34,7 +30,7 @@ import { cn } from '../../utils';
 
 export const ProfilePage = () => {
   const navigate = useNavigate();
-  const { user, setUser, setAuthenticated, clearAuth } = useAuthStore();
+  const { user, clearAuth } = useAuthStore();
   const { defaultVpa, linkedAccounts } = useAccountStore();
 
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
@@ -222,7 +218,7 @@ export const ProfilePage = () => {
                   </div>
                   <div className="flex-1 text-left">
                     <p className="text-white font-medium">{item.label}</p>
-                    {item.value && (
+                    {'value' in item && item.value && (
                       <p className="text-sm text-slate-500">{item.value}</p>
                     )}
                   </div>
@@ -262,7 +258,7 @@ export const ProfilePage = () => {
         title="Logout"
         message="Are you sure you want to logout? You'll need to login again to access your account."
         confirmText="Logout"
-        confirmVariant="danger"
+        variant="danger"
         isLoading={isLoggingOut}
       />
     </div>

@@ -42,8 +42,8 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
               'hover:border-[var(--input-border-hover)]',
               'transition-all duration-200',
               'disabled:opacity-50 disabled:cursor-not-allowed',
-              leftIcon && 'pl-12',
-              (rightIcon || isPassword) && 'pr-12',
+              Boolean(leftIcon) && 'pl-12',
+              Boolean(rightIcon || isPassword) && 'pr-12',
               error && 'border-[var(--color-error-500)] focus:border-[var(--color-error-500)] focus:ring-[var(--color-error-500)]/20',
               className
             )}

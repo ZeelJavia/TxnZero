@@ -11,12 +11,9 @@ import {
   CheckCircle2,
   XCircle,
   Shield,
-  Clock,
   AlertTriangle,
-  Sparkles,
   Loader2,
 } from 'lucide-react';
-import toast from 'react-hot-toast';
 import { Button, Input, Card, MpinInput, ProcessingLoader } from '../../components/ui';
 import api, { paymentApi } from '../../services/api';
 import { useAuthStore, useAccountStore } from '../../store';
@@ -39,8 +36,8 @@ interface ForensicReport {
 export const SendMoneyPage = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { user } = useAuthStore();
-  const { defaultVpa, linkedAccounts } = useAccountStore();
+  useAuthStore();
+  const { defaultVpa } = useAccountStore();
 
   // Get query params from QR scan
   const initialVpa = searchParams.get('vpa') || '';
@@ -760,7 +757,7 @@ const ResultStep = ({ result, recipientName, forensicReport, isLoadingForensic, 
           className="text-slate-400"
         >
           {isSuccess
-            ? `${formatCurrency(result.amount)} sent to ${recipientName}`
+            ? `${formatCurrency(result.amount ?? 0)} sent to ${recipientName}`
             : result.message || 'Something went wrong'}
         </motion.p>
       </div>

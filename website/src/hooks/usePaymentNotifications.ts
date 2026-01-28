@@ -32,7 +32,7 @@ export function usePaymentNotifications() {
   const clientRef = useRef<Client | null>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const subscriptionRef = useRef<any>(null);
-  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isConnectingRef = useRef(false);
   const [isConnected, setIsConnected] = useState(false);
   

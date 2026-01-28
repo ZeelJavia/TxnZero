@@ -18,7 +18,7 @@ const httpsConfig = (() => {
       cert: fs.readFileSync(certPath),
     }
   }
-  return false
+  return undefined
 })()
 
 // https://vite.dev/config/

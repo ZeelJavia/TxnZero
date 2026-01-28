@@ -22,7 +22,7 @@ import { Card, TransactionCard, Skeleton } from '../../components/ui';
 import { useAuthStore, useAccountStore, useTransactionStore } from '../../store';
 import { useAccountData } from '../../hooks';
 import { formatCurrency } from '../../utils';
-import type { Transaction } from '../../types';
+
 
 // Bank name mapping
 const BANK_NAMES: Record<string, string> = {
@@ -51,7 +51,6 @@ export const DashboardPage = () => {
     formattedBalance,
     isLoadingAccounts,
     isLoadingBalance,
-    isLoadingTransactions,
     refreshAll,
   } = useAccountData();
 
