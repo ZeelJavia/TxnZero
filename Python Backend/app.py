@@ -5,6 +5,7 @@ import pandas as pd
 import redis
 import json
 from fastapi import FastAPI, BackgroundTasks, HTTPException
+from prometheus_fastapi_instrumentator import Instrumentator
 from neo4j import GraphDatabase
 from dotenv import load_dotenv
 from graph_rag import ForensicGraphRAG  # ✅ Import the new class
@@ -42,6 +43,7 @@ REDIS_PORT = int(os.getenv("REDIS_PORT", 6379))
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 
 app = FastAPI(title="LedgerZero Graph Sync & Forensic Engine")
+Instrumentator().instrument(app).expose(app)
 
 # --- 🕵️ FORENSIC INVESTIGATOR (GraphRAG) ---
 class ForensicInvestigator:
