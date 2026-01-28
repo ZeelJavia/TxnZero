@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
@@ -59,6 +59,19 @@ export const DashboardPage = () => {
   const [isRefreshing, setIsRefreshing] = useState(false);
   
   const isLoading = isLoadingAccounts || isLoadingBalance;
+
+  // Listen for refresh events from real-time notifications
+  const handleDashboardRefresh = useCallback(() => {
+    console.log('🔄 Refreshing dashboard data after notification...');
+    refreshAll();
+  }, [refreshAll]);
+
+  useEffect(() => {
+    window.addEventListener('refresh-dashboard', handleDashboardRefresh);
+    return () => {
+      window.removeEventListener('refresh-dashboard', handleDashboardRefresh);
+    };
+  }, [handleDashboardRefresh]);
 
   // Calculate stats from transactions using direction field
   const stats = transactions.reduce(
@@ -240,9 +253,11 @@ export const DashboardPage = () => {
             </div>
             <div>
               <p className="text-xs text-[var(--text-muted)]">Income</p>
-              <p className="text-lg font-semibold text-[var(--text-primary)]">
-                {isLoading ? <Skeleton className="h-6 w-20" /> : `+${formatCurrency(stats.income)}`}
-              </p>
+              {isLoading ? (
+                <Skeleton className="h-6 w-20" />
+              ) : (
+                <p className="text-lg font-semibold text-[var(--text-primary)]">+{formatCurrency(stats.income)}</p>
+              )}
             </div>
           </div>
         </Card>
@@ -254,9 +269,11 @@ export const DashboardPage = () => {
             </div>
             <div>
               <p className="text-xs text-[var(--text-muted)]">Spent</p>
-              <p className="text-lg font-semibold text-[var(--text-primary)]">
-                {isLoading ? <Skeleton className="h-6 w-20" /> : `-${formatCurrency(stats.spent)}`}
-              </p>
+              {isLoading ? (
+                <Skeleton className="h-6 w-20" />
+              ) : (
+                <p className="text-lg font-semibold text-[var(--text-primary)]">-{formatCurrency(stats.spent)}</p>
+              )}
             </div>
           </div>
         </Card>

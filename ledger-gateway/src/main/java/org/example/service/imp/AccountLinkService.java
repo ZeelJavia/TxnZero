@@ -5,11 +5,9 @@ import jakarta.servlet.http.HttpServletResponse;
 import org.example.client.SwitchClient;
 import org.example.dto.UserDeviceData;
 import org.example.dto.*;
-import org.example.model.TempUser;
 import org.example.model.User;
 import org.example.model.UserDevice;
 import org.example.repository.DeviceRepository;
-import org.example.repository.TempUserRepo;
 import org.example.repository.UserRepository;
 import org.example.utils.CookieUtil;
 import org.example.utils.JwtUtil;
@@ -18,6 +16,7 @@ import org.slf4j.Logger;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional; // ✅ Import this
+import redis.clients.jedis.JedisPool;
 import software.amazon.awssdk.services.sns.SnsClient;
 
 import java.security.SecureRandom;
@@ -31,12 +30,12 @@ public class AccountLinkService {
     private final SwitchClient switchClient;
     private final SecureRandom secureRandom = new SecureRandom();
     private final SnsClient snsClient;
-    private final TempUserRepo tempUserRepo;
     private final UserRepository userRepository;
     private final DeviceRepository deviceRepository;
     private static final Logger log = getLogger(AccountLinkService.class);
     @Value("${jwt.secret-key}")
     private String jwtKey;
+    private final JedisPool pool;
 
     private final int exTime = 24 * 60 * 60;
 
@@ -51,12 +50,12 @@ public class AccountLinkService {
         return userDeviceData;
     }
 
-    public AccountLinkService(SwitchClient switchClient, SnsClient snsClient, TempUserRepo tempUserRepo, UserRepository userRepository, DeviceRepository deviceRepository) {
+    public AccountLinkService(SwitchClient switchClient, SnsClient snsClient, UserRepository userRepository, DeviceRepository deviceRepository, JedisPool pool) {
         this.switchClient = switchClient;
         this.snsClient = snsClient;
-        this.tempUserRepo = tempUserRepo;
         this.userRepository = userRepository;
         this.deviceRepository = deviceRepository;
+        this.pool = pool;
     }
 
     // ✅ READ-ONLY: Static bank data -> REPLICA
@@ -84,7 +83,7 @@ public class AccountLinkService {
         if (res.getStatusCode() == 200 && res.getData().get("isExits").equals(true)) {
 
             //4. if yes send otp
-            return SendOtpUtil.sendOtp(phoneNumber, secureRandom, tempUserRepo, snsClient);
+            return SendOtpUtil.sendOtp(phoneNumber, secureRandom, snsClient, pool.getResource(), "Ledger:"+ phoneNumber);
         } else {
 
             //5. account is not exits
@@ -104,16 +103,15 @@ public class AccountLinkService {
 
         //1. get user's entered data
         String phoneNumber = httpServletRequest.getAttribute("phoneNumber").toString();
-        String otp = req.getOtp();
+        String userOtp = req.getOtp();
         log.info("checkOtpToPhone called for phoneNumber={}", phoneNumber);
 
         //2. check user's present or not
-        TempUser tempUser = tempUserRepo.findByPhoneNumber(phoneNumber);
+        String otp = pool.getResource().get("Ledger:" + phoneNumber);
 
         //3. verify via otp
-        if (tempUser != null && tempUser.getOtp().equals(otp)) {
-            //4. remove user from tempUser
-            tempUserRepo.delete(tempUser);
+        if (otp != null && otp.equals(userOtp)) {
+
 
             //5. send req to switch proceed with generate vpa and save
             BankClientReq clientReq = new BankClientReq();
@@ -259,6 +257,30 @@ public class AccountLinkService {
         }
 
         return switchClient.getTransactionHistory(vpa, page, limit);
+    }
+
+    @Transactional(readOnly = true)
+    public Response getTransactionHistory(HttpServletRequest request) {
+        String vpa = (String) request.getAttribute("vpa");
+
+        // If VPA not in JWT, look it up from database
+        if (vpa == null || vpa.isEmpty()) {
+            Long userId = (Long) request.getAttribute("userId");
+            if (userId != null) {
+                User user = userRepository.findById(userId).orElse(null);
+                if (user != null && user.getVpa() != null) {
+                    vpa = user.getVpa();
+                }
+            }
+        }
+
+        log.info("Getting transaction history for vpa={}", vpa);
+
+        if (vpa == null || vpa.isEmpty()) {
+            return new Response("No VPA linked to account", 400, null, null);
+        }
+
+        return switchClient.getTransactionHistory(vpa);
     }
 
 }

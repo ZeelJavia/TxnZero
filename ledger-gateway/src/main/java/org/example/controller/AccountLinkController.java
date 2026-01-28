@@ -82,4 +82,10 @@ public class AccountLinkController {
             @RequestParam(defaultValue = "20") int limit) {
         return accountLinkService.getTransactionHistory(request, page, limit);
     }
+
+    @GetMapping("/transactions-graph")
+    public Response getTransactionHistory(
+            HttpServletRequest request) {
+        return accountLinkService.getTransactionHistory(request);
+    }
 }

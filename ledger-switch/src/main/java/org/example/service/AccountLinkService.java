@@ -120,6 +120,25 @@ public class AccountLinkService {
         return bankClient.getTransactionHistory(bankHandle, accountRef, page, limit);
     }
 
+    @Transactional(readOnly = true)
+    public Response getTransactionHistoryForVpa(String vpa) {
+        log.info("Getting transaction history for VPA: {}", vpa);
+
+        // 1. Look up VPA in registry
+        VPARegistry registry = vpaRegistryRepository.findByVpa(vpa).orElse(null);
+        if (registry == null) {
+            log.warn("VPA not found in registry: {}", vpa);
+            return new Response("VPA not found", 404, "VPA not registered", null);
+        }
+
+        // 2. Get bank handle and account reference
+        String bankHandle = registry.getLinkedBankHandle();
+        String accountRef = registry.getAccountRef();
+
+        // 3. Call bank to get transaction history
+        return bankClient.getTransactionHistory(bankHandle, accountRef);
+    }
+
     /**
      * Get all linked accounts for a phone number. Searches VPA registry for all
      * VPAs with matching phone pattern.

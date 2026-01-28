@@ -9,6 +9,7 @@ import {
   ProfilePage,
   QRCodePage,
 } from '../pages';
+import { usePaymentNotifications } from '../hooks/usePaymentNotifications';
 
 // ============================================
 // PROTECTED ROUTE COMPONENT
@@ -19,6 +20,9 @@ interface ProtectedRouteProps {
 }
 
 const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
+  // Initialize WebSocket here so it stays connected across all protected routes
+  usePaymentNotifications();
+  
   const isAuthenticated = localStorage.getItem('auth-storage');
   
   if (!isAuthenticated) {

@@ -2,13 +2,15 @@ import pandas as pd
 from neo4j import GraphDatabase
 import time
 from dotenv import load_dotenv
-load_dotenv()
 import os
-password = os.getenv("password")
 
 # --- CONFIGURATION ---
+load_dotenv()
+password = os.getenv("password")
 NEO4J_URI = "bolt://localhost:7687"
 NEO4J_AUTH = ("neo4j", password)
+BATCH_SIZE = 1000  # ✅ Defined batch size
+
 class Neo4jSeeder:
     def __init__(self, uri, auth):
         self.driver = GraphDatabase.driver(uri, auth=auth)
@@ -30,10 +32,22 @@ class Neo4jSeeder:
 
     def load_users(self, csv_file):
         print(f"🔄 Loading Users from {csv_file}...")
+        if not os.path.exists(csv_file):
+            print(f"❌ ERROR: File not found: {csv_file}")
+            return
+
         df = pd.read_csv(csv_file)
-        df['kyc_status'] = df['kyc_status'].fillna('PENDING')
-        df['risk_score'] = df['risk_score'].fillna(0.0)
-        
+        # Handle potential missing columns or renames
+        if 'kyc_status' in df.columns:
+            df['kyc_status'] = df['kyc_status'].fillna('PENDING')
+        else:
+            df['kyc_status'] = 'PENDING'
+
+        if 'risk_score' in df.columns:
+            df['risk_score'] = df['risk_score'].fillna(0.0)
+        else:
+            df['risk_score'] = 0.0
+
         records = df.to_dict('records')
         query = """
         UNWIND $batch AS row
@@ -43,12 +57,16 @@ class Neo4jSeeder:
             u.kyc = row.kyc_status,
             u.riskScore = toFloat(row.risk_score),
             u.isFraud = toInteger(row.is_fraud), /* Ground Truth for Training */
-            u.vpa = toString(row.phone_number) + '@upibank'
+            u.vpa = toString(row.phone_number) + '@okaxis' /* Standardize VPA format */
         """
         self._batch_execute(query, records, "Users")
 
     def load_devices(self, csv_file):
         print(f"🔄 Loading Devices from {csv_file}...")
+        if not os.path.exists(csv_file):
+            print(f"⚠️ WARNING: Device file not found ({csv_file}). Skipping topology.")
+            return
+
         df = pd.read_csv(csv_file)
         records = df.to_dict('records')
         
@@ -69,12 +87,17 @@ class Neo4jSeeder:
 
     def load_transactions(self, csv_file):
         print(f"🔄 Loading Transactions from {csv_file}...")
+        if not os.path.exists(csv_file):
+            print(f"❌ ERROR: File not found: {csv_file}")
+            return
+
         df = pd.read_csv(csv_file)
         records = df.to_dict('records')
         
         # This builds the 'Money Cycles'
         query = """
         UNWIND $batch AS row
+        /* Match by VPA which we set in load_users */
         MATCH (sender:User {vpa: row.payer_vpa})
         MATCH (receiver:User {vpa: row.payee_vpa})
         
@@ -88,6 +111,10 @@ class Neo4jSeeder:
 
     def _batch_execute(self, query, data, label):
         total = len(data)
+        if total == 0:
+            print(f"⚠️ No records found for {label}")
+            return
+
         start_time = time.time()
         with self.driver.session() as session:
             for i in range(0, total, BATCH_SIZE):
@@ -100,9 +127,14 @@ if __name__ == "__main__":
     seeder = Neo4jSeeder(NEO4J_URI, NEO4J_AUTH)
     try:
         seeder.clean_db()  # 1. Wipe old data
-        seeder.load_users("users.csv")
-        seeder.load_devices("user_devices.csv")
-        seeder.load_transactions("transactions.csv")
+        
+        # ✅ FIX: Point to the 'train_test_data' folder
+        data_folder = "train_test_data"
+        
+        seeder.load_users(os.path.join(data_folder, "users.csv"))
+        seeder.load_devices(os.path.join(data_folder, "user_devices.csv")) 
+        seeder.load_transactions(os.path.join(data_folder, "transactions.csv"))
+        
         print("\n🎉 Graph Population Complete!")
     except Exception as e:
         print(f"\n❌ Error: {e}")

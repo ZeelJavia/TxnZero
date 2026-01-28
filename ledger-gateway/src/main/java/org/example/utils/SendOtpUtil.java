@@ -1,10 +1,9 @@
 package org.example.utils;
 
 import org.example.dto.Response;
-import org.example.model.TempUser;
-import org.example.repository.TempUserRepo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import redis.clients.jedis.Jedis;
 import software.amazon.awssdk.services.sns.SnsClient;
 import software.amazon.awssdk.services.sns.model.PublishRequest;
 import software.amazon.awssdk.services.sns.model.PublishResponse;
@@ -14,20 +13,17 @@ import java.security.SecureRandom;
 public class SendOtpUtil { ;
     private static final Logger log = LoggerFactory.getLogger(SendOtpUtil.class);
 
-    public static Response sendOtp(String phoneNumber, SecureRandom secureRandom, TempUserRepo tempUserRepo, SnsClient snsClient){
+    public static Response sendOtp(String phoneNumber, SecureRandom secureRandom, SnsClient snsClient, Jedis jedis, String key){
+        phoneNumber = PhoneNumberUtil.setCode(phoneNumber);
+
         //1. otp gen
         int otpValue = 100000 + secureRandom.nextInt(900000); // Always 6 digits
         String otp = String.valueOf(otpValue);
 
-        //2. check user is present into TempRepo
-        TempUser tempUser = tempUserRepo.findByPhoneNumber(phoneNumber);
-        if (tempUser == null) {
-            tempUser = new TempUser();
-            tempUser.setPhoneNumber(phoneNumber);
-        }
-        //3. store otp
-        tempUser.setOtp(otp);
-        tempUserRepo.save(tempUser);
+        //2. set otp
+        jedis.set(key,otp);
+        jedis.expire(key,600); //10 minutes
+
         log.info("OTP stored temporarily for phoneNumber={}", phoneNumber);
 
         try {
@@ -35,7 +31,7 @@ public class SendOtpUtil { ;
             PublishResponse result = snsClient.publish(
                     PublishRequest.builder()
                             .message("Your LedgerZero Verification OTP is: " + otp)
-                            .phoneNumber(phoneNumber)
+                            .phoneNumber(PhoneNumberUtil.setCode(phoneNumber))
                             .build()
             );
 

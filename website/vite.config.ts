@@ -27,6 +27,10 @@ export default defineConfig({
     react(),
     tailwindcss(),
   ],
+  define: {
+    // Fix for sockjs-client which expects Node.js globals
+    global: 'globalThis',
+  },
   server: {
     host: '0.0.0.0',  // Allow external access
     port: 5173,       // Default Vite port
@@ -38,6 +42,13 @@ export default defineConfig({
         target: 'http://localhost:8080',
         changeOrigin: true,
         secure: false,
+      },
+      // Proxy WebSocket connections to gateway
+      '/ws': {
+        target: 'http://localhost:8080',
+        changeOrigin: true,
+        secure: false,
+        ws: true,
       },
     },
   },

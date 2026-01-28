@@ -55,7 +55,7 @@ public class BankAccount {
      */
     @Version
     @Column(name = "version")
-    private Long version;
+    private Long version= 0L;
 
     /**
      * Debits amount from account balance.
