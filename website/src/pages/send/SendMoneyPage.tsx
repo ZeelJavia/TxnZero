@@ -445,7 +445,7 @@ const RecipientStep = ({ vpa, setVpa, error, isLoading, onSubmit }: RecipientSte
         label="UPI ID"
         placeholder="name@upi"
         value={vpa}
-        onChange={(e) => setVpa(e.target.value.toLowerCase())}
+        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setVpa(e.target.value.toLowerCase())}
         error={error}
         leftIcon={<AtSign size={20} />}
         autoFocus
@@ -557,7 +557,7 @@ const AmountStep = ({ amount, setAmount, note, setNote, quickAmounts, error, rec
         label="Add a note (optional)"
         placeholder="Dinner, rent, etc."
         value={note}
-        onChange={(e) => setNote(e.target.value)}
+        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNote(e.target.value)}
       />
 
       <Button

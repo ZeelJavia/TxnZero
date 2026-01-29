@@ -497,7 +497,7 @@ const PhoneStep = ({ phoneNumber, setPhoneNumber, error, isLoading, onSubmit, au
         type="tel"
         placeholder="Enter 10-digit mobile number"
         value={phoneNumber}
-        onChange={(e) => setPhoneNumber(e.target.value)}
+        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPhoneNumber(e.target.value)}
         error={error}
         leftIcon={<Phone size={20} />}
         autoFocus
@@ -632,7 +632,7 @@ const RegisterStep = ({
         label="Full Name"
         placeholder="Enter your full name"
         value={fullName}
-        onChange={(e) => setFullName(e.target.value)}
+        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFullName(e.target.value)}
         leftIcon={<User size={20} />}
         autoFocus
       />
@@ -642,7 +642,7 @@ const RegisterStep = ({
         type="password"
         placeholder="Create a password"
         value={password}
-        onChange={(e) => setPassword(e.target.value)}
+        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPassword(e.target.value)}
         leftIcon={<Lock size={20} />}
         hint="Minimum 6 characters"
       />
@@ -652,7 +652,7 @@ const RegisterStep = ({
         type="password"
         placeholder="Confirm your password"
         value={confirmPassword}
-        onChange={(e) => setConfirmPassword(e.target.value)}
+        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setConfirmPassword(e.target.value)}
         error={error}
         leftIcon={<Lock size={20} />}
       />
@@ -707,7 +707,7 @@ const LoginStep = ({ phoneNumber, password, setPassword, error, isLoading, onSub
         type="password"
         placeholder="Enter your password"
         value={password}
-        onChange={(e) => setPassword(e.target.value)}
+        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPassword(e.target.value)}
         error={error}
         leftIcon={<Lock size={20} />}
         autoFocus
