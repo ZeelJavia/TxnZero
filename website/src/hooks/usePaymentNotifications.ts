@@ -8,7 +8,7 @@ import { useAuthStore, useAccountStore } from '../store';
 const getWsUrl = () => {
   // Use relative path so Vite proxy handles the connection
   // This works for both HTTP and HTTPS since the proxy handles it
-  return `${window.location.origin}/ws/notifications`;
+  return `${import.meta.env.VITE_WEBSOCKET_URL}/ws/notifications`;
 };
 
 export interface PaymentNotificationEvent {
