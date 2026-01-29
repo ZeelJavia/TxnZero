@@ -7,6 +7,7 @@ import { useAuthStore, useAccountStore } from '../store';
 // WebSocket URL - use relative path to go through Vite proxy (handles HTTP/HTTPS)
 const getWsUrl = () => {
   if (import.meta.env.DEV) {
+    console.log('Using development WebSocket URL via Vite proxy', window.location.origin);
     return `${window.location.origin}/ws/notifications`;   // go through Vite proxy
   }
   return `${import.meta.env.VITE_WEBSOCKET_URL}/ws/notifications`;  // real backend

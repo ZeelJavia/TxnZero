@@ -91,7 +91,7 @@ services:
       - BANK_SERVICE_URL=http://bank-axis:8070
 
       # REDIS (Local container)
-      - SPRING_DATA_REDIS_HOST=redis
+      - REDIS_URL=rediss://default:AVNS_wLpyhjGYr2ddS9CVo2C@valkey-2972402e-devanchauhan012-3b3f.l.aivencloud.com:26349
 
       # DATABASE (Targeting switch_db)
       - SPRING_DATASOURCE_WRITER_JDBC_URL=jdbc:postgresql://ledger-master-db.cjiaa0ye444g.ap-south-1.rds.amazonaws.com:5432/switch_db
@@ -106,7 +106,7 @@ services:
       - SPRING_NEO4J_AUTHENTICATION_USERNAME=neo4j
       - SPRING_NEO4J_AUTHENTICATION_PASSWORD=password
 
-    depends_on: [kafka, redis]
+    depends_on: [kafka]
     restart: always
     networks: [java-net]
 
