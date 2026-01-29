@@ -14,8 +14,10 @@ import {
   Shield,
   Sun,
   Moon,
+  ChevronDown,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
+import toast from 'react-hot-toast';
 import { cn } from '../../utils';
 import { useAuthStore } from '../../store';
 import { useTheme } from '../../context';
@@ -66,15 +68,39 @@ const ThemeToggle = () => {
 
 export const Layout = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement>(null);
   const location = useLocation();
   const navigate = useNavigate();
   const { user, clearAuth } = useAuthStore();
   
   // WebSocket is now initialized in ProtectedRoute to stay connected across all pages
 
+  // Close user menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
+        setIsUserMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   const handleLogout = () => {
     clearAuth();
     navigate('/auth');
+  };
+
+  const showComingSoon = () => {
+    toast('Coming Soon!', {
+      icon: '🚀',
+      style: {
+        background: 'var(--card-bg)',
+        color: 'var(--text-primary)',
+        border: '1px solid var(--border-subtle)',
+      },
+    });
   };
 
   const navItems = [
@@ -133,20 +159,88 @@ export const Layout = () => {
                 <ThemeToggle />
 
                 {/* Notifications */}
-                <button className="relative p-2 rounded-xl text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--interactive-hover)] transition-colors touch-target">
+                <button 
+                  onClick={showComingSoon}
+                  className="relative p-2 rounded-xl text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--interactive-hover)] transition-colors touch-target"
+                >
                   <Bell size={20} />
                   <span className="absolute top-1 right-1 w-2 h-2 bg-[var(--color-error-500)] rounded-full" />
                 </button>
 
                 {/* User Menu (Desktop) */}
-                <div className="hidden md:flex items-center gap-3">
-                  <div className="text-right">
-                    <p className="text-sm font-medium text-[var(--text-primary)]">{user?.fullName || 'User'}</p>
-                    <p className="text-xs text-[var(--text-muted)]">{user?.vpa || 'No VPA'}</p>
-                  </div>
-                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[var(--color-primary-500)] to-[var(--color-accent-500)] flex items-center justify-center text-white font-bold shadow-lg shadow-[var(--color-primary-500)]/20">
-                    {user?.fullName?.[0]?.toUpperCase() || 'U'}
-                  </div>
+                <div className="hidden md:block relative" ref={userMenuRef}>
+                  <button
+                    onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
+                    className="flex items-center gap-3 p-2 rounded-xl hover:bg-[var(--interactive-hover)] transition-colors"
+                  >
+                    <div className="text-right">
+                      <p className="text-sm font-medium text-[var(--text-primary)]">{user?.fullName || 'User'}</p>
+                      <p className="text-xs text-[var(--text-muted)]">{user?.vpa || 'No VPA'}</p>
+                    </div>
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[var(--color-primary-500)] to-[var(--color-accent-500)] flex items-center justify-center text-white font-bold shadow-lg shadow-[var(--color-primary-500)]/20">
+                      {user?.fullName?.[0]?.toUpperCase() || 'U'}
+                    </div>
+                    <ChevronDown size={16} className={cn(
+                      "text-[var(--text-muted)] transition-transform",
+                      isUserMenuOpen && "rotate-180"
+                    )} />
+                  </button>
+                  
+                  {/* Desktop User Dropdown */}
+                  <AnimatePresence>
+                    {isUserMenuOpen && (
+                      <motion.div
+                        initial={{ opacity: 0, y: -10, scale: 0.95 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: -10, scale: 0.95 }}
+                        transition={{ duration: 0.15 }}
+                        className="absolute right-0 mt-2 w-56 rounded-xl bg-[var(--card-bg)] border border-[var(--card-border)] shadow-2xl overflow-hidden"
+                      >
+                        <div className="p-2">
+                          <Link
+                            to="/profile"
+                            onClick={() => setIsUserMenuOpen(false)}
+                            className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--interactive-hover)] transition-colors"
+                          >
+                            <User size={18} />
+                            <span className="text-sm font-medium">Profile</span>
+                          </Link>
+                          <button
+                            onClick={() => {
+                              setIsUserMenuOpen(false);
+                              showComingSoon();
+                            }}
+                            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--interactive-hover)] transition-colors"
+                          >
+                            <Settings size={18} />
+                            <span className="text-sm font-medium">Settings</span>
+                          </button>
+                          <button
+                            onClick={() => {
+                              setIsUserMenuOpen(false);
+                              showComingSoon();
+                            }}
+                            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--interactive-hover)] transition-colors"
+                          >
+                            <Shield size={18} />
+                            <span className="text-sm font-medium">Security</span>
+                          </button>
+                        </div>
+                        <div className="border-t border-[var(--border-subtle)]">
+                          <button
+                            onClick={() => {
+                              setIsUserMenuOpen(false);
+                              handleLogout();
+                            }}
+                            className="w-full flex items-center gap-3 px-5 py-3 text-[var(--color-error-400)] hover:bg-[var(--color-error-500)]/10 transition-colors"
+                          >
+                            <LogOut size={18} />
+                            <span className="text-sm font-medium">Logout</span>
+                          </button>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </div>
 
                 {/* Mobile Menu Button */}

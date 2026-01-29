@@ -60,6 +60,19 @@ export const ProfilePage = () => {
     }
   };
 
+  // Show coming soon toast for features not yet implemented
+  const showComingSoon = (featureName: string) => {
+    toast('Coming Soon!', {
+      icon: '🚀',
+      style: {
+        background: 'var(--card-bg)',
+        color: 'var(--text-primary)',
+        border: '1px solid var(--border-subtle)',
+      },
+    });
+    console.log(`Feature "${featureName}" coming soon`);
+  };
+
   const menuSections = [
     {
       title: 'Account',
@@ -74,13 +87,13 @@ export const ProfilePage = () => {
           icon: Shield,
           label: 'Security',
           value: 'PIN, Password',
-          onClick: () => navigate('/settings/security'),
+          onClick: () => showComingSoon('Security'),
         },
         {
           icon: Smartphone,
           label: 'Devices',
           value: 'Manage devices',
-          onClick: () => navigate('/settings/devices'),
+          onClick: () => showComingSoon('Devices'),
         },
       ],
     },
@@ -91,13 +104,13 @@ export const ProfilePage = () => {
           icon: Bell,
           label: 'Notifications',
           value: 'Enabled',
-          onClick: () => navigate('/settings/notifications'),
+          onClick: () => showComingSoon('Notifications'),
         },
         {
           icon: Moon,
           label: 'Appearance',
           value: 'Dark mode',
-          onClick: () => {},
+          onClick: () => showComingSoon('Appearance'),
         },
       ],
     },
@@ -107,17 +120,17 @@ export const ProfilePage = () => {
         {
           icon: HelpCircle,
           label: 'Help & Support',
-          onClick: () => {},
+          onClick: () => showComingSoon('Help & Support'),
         },
         {
           icon: FileText,
           label: 'Terms & Conditions',
-          onClick: () => {},
+          onClick: () => showComingSoon('Terms & Conditions'),
         },
         {
           icon: Lock,
           label: 'Privacy Policy',
-          onClick: () => {},
+          onClick: () => showComingSoon('Privacy Policy'),
         },
       ],
     },
