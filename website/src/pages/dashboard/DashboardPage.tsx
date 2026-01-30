@@ -80,8 +80,8 @@ export const DashboardPage = () => {
   };
 
   const quickActions = [
-    { icon: Send, label: 'Send', onClick: () => navigate('/send'), gradient: 'from-primary-500 to-primary-600' },
-    { icon: QrCode, label: 'Scan', onClick: () => navigate('/qr'), gradient: 'from-accent-500 to-accent-600' },
+    { icon: Send, label: 'Send', onClick: () => navigate('/send'), gradient: 'from-emerald-400 to-emerald-500' },
+    { icon: QrCode, label: 'Scan', onClick: () => navigate('/qr'), gradient: 'from-amber-400 to-amber-500' },
     { icon: History, label: 'History', onClick: () => navigate('/transactions'), gradient: 'from-emerald-500 to-emerald-600' },
     { icon: Plus, label: 'Add Bank', onClick: () => navigate('/link-bank'), gradient: 'from-amber-500 to-amber-600' },
   ];
@@ -108,7 +108,7 @@ export const DashboardPage = () => {
           </motion.h1>
         </div>
 
-        <div className="flex items-center gap-3">
+        {/* <div className="flex items-center gap-3">
           <motion.button
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
@@ -125,7 +125,7 @@ export const DashboardPage = () => {
           >
             <Settings size={20} />
           </motion.button>
-        </div>
+        </div> */}
       </header>
 
       {/* Balance Card */}

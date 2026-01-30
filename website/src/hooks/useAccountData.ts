@@ -42,6 +42,7 @@ export const useLinkedAccounts = () => {
         const primary = accounts.find(a => a.isPrimary) || accounts[0];
         if (primary) {
           store.setPrimaryVpa(primary.vpa);
+          store.setDefaultVpa(primary.vpa);  // Also set defaultVpa!
           // Get balance from linked account data
           const primaryData = response.data.data.accounts.find((a: LinkedAccountData) => a.vpa === primary.vpa);
           if (primaryData?.balance !== undefined) {

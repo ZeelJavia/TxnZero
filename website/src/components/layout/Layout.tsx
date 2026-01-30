@@ -94,7 +94,7 @@ export const Layout = () => {
 
   const showComingSoon = () => {
     toast('Coming Soon!', {
-      icon: '🚀',
+      icon: '',
       style: {
         background: 'var(--card-bg)',
         color: 'var(--text-primary)',
@@ -106,9 +106,9 @@ export const Layout = () => {
   const navItems = [
     { icon: Home, label: 'Home', path: '/dashboard' },
     { icon: History, label: 'History', path: '/transactions' },
-    { icon: QrCode, label: 'Scan & Pay', path: '/scan' },
-    { icon: Wallet, label: 'Bank', path: '/bank' },
-    { icon: User, label: 'Profile', path: '/profile' },
+    { icon: QrCode, label: 'Scan & Pay', path: '/qr' },
+    // { icon: Wallet, label: 'Bank', path: '/bank' },
+    // { icon: User, label: 'Profile', path: '#' },
   ];
 
   return (
@@ -198,8 +198,11 @@ export const Layout = () => {
                       >
                         <div className="p-2">
                           <Link
-                            to="/profile"
-                            onClick={() => setIsUserMenuOpen(false)}
+                            to="#"
+                            onClick={() => {
+                              setIsUserMenuOpen(false);
+                              showComingSoon();
+                            }}
                             className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--interactive-hover)] transition-colors"
                           >
                             <User size={18} />

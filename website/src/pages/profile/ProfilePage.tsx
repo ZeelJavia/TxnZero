@@ -63,7 +63,7 @@ export const ProfilePage = () => {
   // Show coming soon toast for features not yet implemented
   const showComingSoon = (featureName: string) => {
     toast('Coming Soon!', {
-      icon: '🚀',
+      icon: '',
       style: {
         background: 'var(--card-bg)',
         color: 'var(--text-primary)',
