@@ -144,26 +144,26 @@ export const TransactionsPage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950">
+    <div className="min-h-screen bg-[var(--bg-primary)]">
       {/* Header */}
-      <header className="sticky top-0 z-50 bg-slate-950/80 backdrop-blur-xl border-b border-slate-800/50">
+      <header className="sticky top-0 z-50 bg-[var(--nav-bg)] backdrop-blur-xl border-b border-[var(--nav-border)]">
         <div className="flex items-center gap-4 p-4">
           <button
             onClick={() => navigate(-1)}
-            className="w-10 h-10 rounded-xl bg-slate-800/80 flex items-center justify-center text-slate-400 hover:text-white transition-colors"
+            className="w-10 h-10 rounded-xl bg-[var(--card-bg)] border border-[var(--card-border)] flex items-center justify-center text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors"
             title="Go back"
           >
             <ArrowLeft size={20} />
           </button>
-          <h1 className="text-lg font-semibold text-white flex-1">Transactions</h1>
+          <h1 className="text-lg font-semibold text-[var(--text-primary)] flex-1">Transactions</h1>
           {activeTab === 'transactions' && (
             <button
               onClick={() => setShowFilters(!showFilters)}
               className={cn(
                 'w-10 h-10 rounded-xl flex items-center justify-center transition-colors',
                 showFilters
-                  ? 'bg-primary-500 text-white'
-                  : 'bg-slate-800/80 text-slate-400 hover:text-white'
+                  ? 'bg-[var(--color-primary-500)] text-white'
+                  : 'bg-[var(--card-bg)] border border-[var(--card-border)] text-[var(--text-tertiary)] hover:text-[var(--text-primary)]'
               )}
               title="Toggle filters"
             >
@@ -174,14 +174,14 @@ export const TransactionsPage = () => {
 
         {/* Tab Navigation */}
         <div className="px-4 pb-3">
-          <div className="flex gap-2 p-1 rounded-xl bg-slate-800/50 border border-slate-700/50">
+          <div className="flex gap-2 p-1 rounded-xl bg-[var(--card-bg)] border border-[var(--card-border)]">
             <button
               onClick={() => setActiveTab('transactions')}
               className={cn(
                 'flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium transition-all',
                 activeTab === 'transactions'
-                  ? 'bg-primary-500 text-white shadow-lg shadow-primary-500/20'
-                  : 'text-slate-400 hover:text-white'
+                  ? 'bg-[var(--color-primary-500)] text-white shadow-lg shadow-[var(--color-primary-500)]/20'
+                  : 'text-[var(--text-tertiary)] hover:text-[var(--text-primary)]'
               )}
             >
               <List size={16} />
@@ -192,8 +192,8 @@ export const TransactionsPage = () => {
               className={cn(
                 'flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium transition-all',
                 activeTab === 'network'
-                  ? 'bg-primary-500 text-white shadow-lg shadow-primary-500/20'
-                  : 'text-slate-400 hover:text-white'
+                  ? 'bg-[var(--color-primary-500)] text-white shadow-lg shadow-[var(--color-primary-500)]/20'
+                  : 'text-[var(--text-tertiary)] hover:text-[var(--text-primary)]'
               )}
             >
               <Network size={16} />
@@ -206,13 +206,13 @@ export const TransactionsPage = () => {
         {activeTab === 'transactions' && (
           <div className="px-4 pb-4">
             <div className="relative">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500" />
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-[var(--text-muted)]" />
               <input
                 type="text"
                 placeholder="Search transactions..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-12 pr-4 py-3 rounded-xl bg-slate-800/50 border border-slate-700/50 text-white placeholder-slate-500 focus:outline-none focus:border-primary-500/50"
+                className="w-full pl-12 pr-4 py-3 rounded-xl bg-[var(--input-bg)] border border-[var(--input-border)] text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--color-primary-500)]/50"
               />
             </div>
           </div>
@@ -224,7 +224,7 @@ export const TransactionsPage = () => {
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            className="px-4 pb-4 space-y-3 border-t border-slate-800/50 pt-4"
+            className="px-4 pb-4 space-y-3 border-t border-[var(--border-subtle)] pt-4"
           >
             {/* Type Filters */}
             <div className="flex gap-2 overflow-x-auto scrollbar-thin pb-1">
@@ -241,8 +241,8 @@ export const TransactionsPage = () => {
                   className={cn(
                     'px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap flex items-center gap-2 transition-all',
                     filterType === filter.value
-                      ? 'bg-primary-500 text-white'
-                      : 'bg-slate-800 text-slate-400 hover:text-white'
+                      ? 'bg-[var(--color-primary-500)] text-white'
+                      : 'bg-[var(--card-bg)] border border-[var(--card-border)] text-[var(--text-tertiary)] hover:text-[var(--text-primary)]'
                   )}
                 >
                   {filter.icon && <filter.icon size={16} />}
@@ -265,8 +265,8 @@ export const TransactionsPage = () => {
                   className={cn(
                     'px-3 py-1.5 rounded-lg text-xs font-medium transition-all',
                     dateFilter === filter.value
-                      ? 'bg-accent-500/20 text-accent-400 border border-accent-500/30'
-                      : 'bg-slate-800/50 text-slate-500 hover:text-white'
+                      ? 'bg-[var(--color-accent-500)]/20 text-[var(--color-accent-400)] border border-[var(--color-accent-500)]/30'
+                      : 'bg-[var(--card-bg)] border border-[var(--card-border)] text-[var(--text-muted)] hover:text-[var(--text-primary)]'
                   )}
                 >
                   {filter.label}
@@ -283,24 +283,24 @@ export const TransactionsPage = () => {
           <>
             {/* Stats Summary */}
             <div className="grid grid-cols-3 gap-3">
-              <Card className="p-4 text-center bg-slate-900/50">
-                <ArrowUpRight className="w-5 h-5 text-danger-400 mx-auto mb-2" />
-                <p className="text-xs text-slate-500">Sent</p>
-                <p className="text-lg font-semibold text-white">
+              <Card className="p-4 text-center">
+                <ArrowUpRight className="w-5 h-5 text-[var(--color-error-400)] mx-auto mb-2" />
+                <p className="text-xs text-[var(--text-muted)]">Sent</p>
+                <p className="text-lg font-semibold text-[var(--text-primary)]">
                   {isLoading ? <Skeleton className="h-6 w-16 mx-auto" /> : formatCurrency(stats.totalSent)}
                 </p>
               </Card>
-              <Card className="p-4 text-center bg-slate-900/50">
-                <ArrowDownLeft className="w-5 h-5 text-success-400 mx-auto mb-2" />
-                <p className="text-xs text-slate-500">Received</p>
-                <p className="text-lg font-semibold text-white">
+              <Card className="p-4 text-center">
+                <ArrowDownLeft className="w-5 h-5 text-[var(--color-success-400)] mx-auto mb-2" />
+                <p className="text-xs text-[var(--text-muted)]">Received</p>
+                <p className="text-lg font-semibold text-[var(--text-primary)]">
                   {isLoading ? <Skeleton className="h-6 w-16 mx-auto" /> : formatCurrency(stats.totalReceived)}
                 </p>
               </Card>
-              <Card className="p-4 text-center bg-slate-900/50">
-                <Clock className="w-5 h-5 text-warning-400 mx-auto mb-2" />
-                <p className="text-xs text-slate-500">Pending</p>
-                <p className="text-lg font-semibold text-white">
+              <Card className="p-4 text-center">
+                <Clock className="w-5 h-5 text-[var(--color-warning-400)] mx-auto mb-2" />
+                <p className="text-xs text-[var(--text-muted)]">Pending</p>
+                <p className="text-lg font-semibold text-[var(--text-primary)]">
                   {isLoading ? <Skeleton className="h-6 w-8 mx-auto" /> : stats.pendingCount}
                 </p>
               </Card>
@@ -308,7 +308,7 @@ export const TransactionsPage = () => {
 
             {/* Transaction List */}
             {isLoading ? (
-              <Card className="divide-y divide-slate-800/50 bg-slate-900/50">
+              <Card className="divide-y divide-[var(--border-subtle)]">
                 {[1, 2, 3, 4, 5].map((i) => (
                   <div key={i} className="p-4 flex items-center gap-4">
                     <Skeleton className="w-12 h-12 rounded-full" />
@@ -321,10 +321,10 @@ export const TransactionsPage = () => {
                 ))}
               </Card>
             ) : filteredTransactions.length === 0 ? (
-              <Card className="p-12 text-center bg-slate-900/50">
-                <Search className="w-12 h-12 text-slate-600 mx-auto mb-4" />
-                <h3 className="text-lg font-semibold text-white mb-2">No transactions found</h3>
-                <p className="text-slate-400">
+              <Card className="p-12 text-center">
+                <Search className="w-12 h-12 text-[var(--text-muted)] mx-auto mb-4" />
+                <h3 className="text-lg font-semibold text-[var(--text-primary)] mb-2">No transactions found</h3>
+                <p className="text-[var(--text-tertiary)]">
                   {searchQuery
                     ? 'Try adjusting your search or filters'
                     : 'Your transactions will appear here'}
@@ -334,8 +334,8 @@ export const TransactionsPage = () => {
               <div className="space-y-6">
                 {Object.entries(groupedTransactions).map(([date, txns]) => (
                   <div key={date}>
-                    <h3 className="text-sm font-medium text-slate-400 mb-3 px-1">{date}</h3>
-                    <Card className="divide-y divide-slate-800/50 bg-slate-900/50">
+                    <h3 className="text-sm font-medium text-[var(--text-tertiary)] mb-3 px-1">{date}</h3>
+                    <Card className="divide-y divide-[var(--border-subtle)]">
                       {txns.map((txn) => (
                         <TransactionCard
                           key={txn.transactionId}
@@ -353,7 +353,7 @@ export const TransactionsPage = () => {
                   <button
                     onClick={loadMore}
                     disabled={isLoading}
-                    className="w-full py-3 rounded-xl bg-slate-800/50 border border-slate-700/50 text-slate-400 hover:text-white hover:border-primary-500/50 transition-all disabled:opacity-50"
+                    className="w-full py-3 rounded-xl bg-[var(--card-bg)] border border-[var(--card-border)] text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:border-[var(--color-primary-500)]/50 transition-all disabled:opacity-50"
                   >
                     {isLoading ? 'Loading...' : 'Load More Transactions'}
                   </button>
@@ -367,19 +367,19 @@ export const TransactionsPage = () => {
             {/* Network Info Header */}
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-lg font-semibold text-white">Transaction Network</h2>
-                <p className="text-sm text-slate-400">
+                <h2 className="text-lg font-semibold text-[var(--text-primary)]">Transaction Network</h2>
+                <p className="text-sm text-[var(--text-tertiary)]">
                   Visualize your transaction connections
                 </p>
               </div>
               <div className="flex items-center gap-2 text-sm">
-                <div className="px-3 py-1.5 rounded-lg bg-slate-800/50 border border-slate-700/50">
-                  <span className="text-slate-400">Transactions: </span>
-                  <span className="text-white font-medium">{graphTransactions.length}</span>
+                <div className="px-3 py-1.5 rounded-lg bg-[var(--card-bg)] border border-[var(--card-border)]">
+                  <span className="text-[var(--text-tertiary)]">Transactions: </span>
+                  <span className="text-[var(--text-primary)] font-medium">{graphTransactions.length}</span>
                 </div>
-                <div className="px-3 py-1.5 rounded-lg bg-slate-800/50 border border-slate-700/50">
-                  <span className="text-slate-400">Contacts: </span>
-                  <span className="text-white font-medium">
+                <div className="px-3 py-1.5 rounded-lg bg-[var(--card-bg)] border border-[var(--card-border)]">
+                  <span className="text-[var(--text-tertiary)]">Contacts: </span>
+                  <span className="text-[var(--text-primary)] font-medium">
                     {new Set(graphTransactions.map(t => t.counterpartyVpa)).size}
                   </span>
                 </div>
@@ -395,9 +395,9 @@ export const TransactionsPage = () => {
             />
 
             {/* Graph Tips */}
-            <Card className="p-4 bg-slate-900/50">
-              <h4 className="text-sm font-medium text-white mb-2">Tips</h4>
-              <ul className="text-xs text-slate-400 space-y-1">
+            <Card className="p-4">
+              <h4 className="text-sm font-medium text-[var(--text-primary)] mb-2">Tips</h4>
+              <ul className="text-xs text-[var(--text-tertiary)] space-y-1">
                 <li>• Drag nodes to rearrange the graph</li>
                 <li>• Scroll to zoom in/out</li>
                 <li>• Click on a node to see details</li>
@@ -412,7 +412,7 @@ export const TransactionsPage = () => {
           <button
             onClick={handleRefresh}
             disabled={isRefreshing}
-            className="fixed bottom-20 right-4 w-12 h-12 rounded-full bg-primary-500 text-white shadow-lg flex items-center justify-center hover:bg-primary-600 transition-colors disabled:opacity-50"
+            className="fixed bottom-20 right-4 w-12 h-12 rounded-full bg-[var(--color-primary-500)] text-white shadow-lg flex items-center justify-center hover:bg-[var(--color-primary-600)] transition-colors disabled:opacity-50"
             title="Refresh transactions"
           >
             <RefreshCw size={20} className={isRefreshing ? 'animate-spin' : ''} />
