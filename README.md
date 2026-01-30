@@ -1,4 +1,4 @@
-# 🏦 LedgerZero: AI-Powered Financial Switch & Fraud Defense
+# 🏦 TxnZero: AI-Powered Financial Switch & Fraud Defense
 
 Java
 Spring Boot
@@ -7,13 +7,13 @@ FastAPI
 Neo4j
 Docker
 
-**LedgerZero** is a high-performance, cloud-native financial switch designed to process transactions with sub-millisecond latency while detecting sophisticated fraud patterns in real-time. It leverages a **Hybrid AI Defense System** combining Graph Neural Networks (GNN), Reinforcement Learning (RL), and Generative AI (GraphRAG).
+**TxnZero** is a high-performance, cloud-native financial switch designed to process transactions with sub-millisecond latency while detecting sophisticated fraud patterns in real-time. It leverages a **Hybrid AI Defense System** combining Graph Neural Networks (GNN), Reinforcement Learning (RL), and Generative AI (GraphRAG).
 
 ---
 
 ## 🚀 The Solution: 4-Layer Hybrid Defense
 
-Traditional fraud detection relies on static rules. LedgerZero introduces a dynamic, self-learning pipeline:
+Traditional fraud detection relies on static rules. TxnZero introduces a dynamic, self-learning pipeline:
 
 | Layer | Component | Technology | Role |
 | :--- | :--- | :--- | :--- |
@@ -28,7 +28,7 @@ Traditional fraud detection relies on static rules. LedgerZero introduces a dyna
 
 The system consists of two primary microservices and a suite of infrastructure containers.
 
-### 1. Ledger Switch (Java/Spring Boot)
+### 1. Txn Switch (Java/Spring Boot)
 * **Core Core:** Handles transaction routing (`/transfer`), debit/credit logic, and SMS notifications.
 * **AI Execution:** Embeds ONNX models directly for ultra-low latency inference (no external API calls for decisioning).
 * **Feedback Loop:** Writes transaction outcomes to Redis to "teach" the RL Agent.
