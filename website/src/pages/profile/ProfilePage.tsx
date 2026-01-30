@@ -42,7 +42,7 @@ export const ProfilePage = () => {
     if (defaultVpa) {
       navigator.clipboard.writeText(defaultVpa);
       setCopiedVpa(true);
-      toast.success('UPI ID copied!');
+      toast.success('VPA copied!');
       setTimeout(() => setCopiedVpa(false), 2000);
     }
   };
@@ -186,7 +186,7 @@ export const ProfilePage = () => {
               <div className="mt-6 p-4 rounded-xl bg-slate-800/50 border border-slate-700/50">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-xs text-slate-500 mb-1">Your UPI ID</p>
+                    <p className="text-xs text-slate-500 mb-1">Your VPA</p>
                     <p className="text-white font-medium">{defaultVpa || 'Not set up'}</p>
                   </div>
                   {defaultVpa && (

@@ -103,7 +103,7 @@ export const SendMoneyPage = () => {
       }
       setStep('amount');
     } catch (error) {
-      setVpaError('Invalid UPI ID');
+      setVpaError('Invalid VPA');
     } finally {
       setIsLoading(false);
     }
@@ -435,14 +435,14 @@ const RecipientStep = ({ vpa, setVpa, error, isLoading, onSubmit }: RecipientSte
   ];
 
   return (
-    <div className="space-y-6">
+    <form onSubmit={(e) => { e.preventDefault(); if (vpa) onSubmit(); }} className="space-y-6">
       <div className="space-y-2 text-center">
         <h2 className="text-2xl font-bold text-white">Who are you paying?</h2>
         <p className="text-slate-400">Enter recipient's UPI ID</p>
       </div>
 
       <Input
-        label="UPI ID"
+        label="VPA"
         placeholder="name@upi"
         value={vpa}
         onChange={(e: React.ChangeEvent<HTMLInputElement>) => setVpa(e.target.value.toLowerCase())}
@@ -452,10 +452,10 @@ const RecipientStep = ({ vpa, setVpa, error, isLoading, onSubmit }: RecipientSte
       />
 
       <Button
+        type="submit"
         fullWidth
         size="lg"
         isLoading={isLoading}
-        onClick={onSubmit}
         disabled={!vpa}
         rightIcon={<ArrowRight size={20} />}
       >
@@ -483,7 +483,7 @@ const RecipientStep = ({ vpa, setVpa, error, isLoading, onSubmit }: RecipientSte
           ))}
         </div>
       </div>
-    </div>
+    </form>
   );
 };
 
@@ -505,15 +505,22 @@ const AmountStep = ({ amount, setAmount, note, setNote, quickAmounts, error, rec
     inputRef.current?.focus();
   }, []);
 
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (amount && parseFloat(amount) > 0) {
+      onSubmit();
+    }
+  };
+
   return (
-    <div className="space-y-6">
+    <form onSubmit={handleSubmit} className="space-y-6">
       {/* Recipient Info */}
       <div className="text-center space-y-1">
         <div className="w-16 h-16 rounded-full bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center text-white text-2xl font-bold mx-auto mb-3">
           {recipientName.charAt(0).toUpperCase()}
         </div>
         <h2 className="text-xl font-bold text-white">{recipientName}</h2>
-        <p className="text-sm text-slate-500">UPI Payment</p>
+        <p className="text-sm text-slate-500">Payment</p>
       </div>
 
       {/* Amount Input */}
@@ -538,6 +545,7 @@ const AmountStep = ({ amount, setAmount, note, setNote, quickAmounts, error, rec
       <div className="flex flex-wrap justify-center gap-2">
         {quickAmounts.map((qa) => (
           <button
+            type="button"
             key={qa}
             onClick={() => setAmount(String(qa))}
             className={cn(
@@ -561,15 +569,15 @@ const AmountStep = ({ amount, setAmount, note, setNote, quickAmounts, error, rec
       />
 
       <Button
+        type="submit"
         fullWidth
         size="lg"
-        onClick={onSubmit}
         disabled={!amount || parseFloat(amount) <= 0}
         rightIcon={<ArrowRight size={20} />}
       >
         Continue
       </Button>
-    </div>
+    </form>
   );
 };
 
@@ -671,8 +679,8 @@ const MpinStep = ({ mpin, setMpin, error, onSubmit }: MpinStepProps) => {
         <div className="w-16 h-16 rounded-full bg-primary-500/20 flex items-center justify-center mx-auto mb-4">
           <Shield className="w-8 h-8 text-primary-400" />
         </div>
-        <h2 className="text-2xl font-bold text-white">Enter UPI PIN</h2>
-        <p className="text-slate-400">Enter your 6-digit UPI PIN to authorize</p>
+        <h2 className="text-2xl font-bold text-white">Enter PIN</h2>
+        <p className="text-slate-400">Enter your 6-digit PIN to authorize</p>
       </div>
 
       <MpinInput
@@ -690,7 +698,7 @@ const MpinStep = ({ mpin, setMpin, error, onSubmit }: MpinStepProps) => {
       </div>
 
       <p className="text-center text-xs text-slate-500">
-        Never share your UPI PIN with anyone
+        Never share your MPIN with anyone
       </p>
     </div>
   );
@@ -790,14 +798,14 @@ const ResultStep = ({ result, recipientName, forensicReport, isLoadingForensic, 
                 </span>
               </div>
             )}
-            {result.riskScore !== undefined && (
+            {/* {result.riskScore !== undefined && (
               <div className="flex justify-between text-sm">
                 <span className="text-slate-400">Risk Score</span>
                 <span className={`font-medium ${result.riskScore > 0.5 ? 'text-amber-400' : 'text-emerald-400'}`}>
                   {(result.riskScore * 100).toFixed(1)}%
                 </span>
               </div>
-            )}
+            )} */}
           </Card>
         </motion.div>
       )}

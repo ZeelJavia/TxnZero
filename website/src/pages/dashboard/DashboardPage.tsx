@@ -6,8 +6,8 @@ import {
   QrCode,
   History,
   Plus,
-  Bell,
-  Settings,
+  // Bell,
+  // Settings,
   ChevronRight,
   Wallet,
   CreditCard,
@@ -181,7 +181,7 @@ export const DashboardPage = () => {
             {/* UPI ID */}
             <div className="flex items-center gap-3 pt-2 border-t border-[var(--border-subtle)]">
               <div className="flex-1">
-                <p className="text-xs text-[var(--text-muted)] mb-1">UPI ID</p>
+                <p className="text-xs text-[var(--text-muted)] mb-1">VPA</p>
                 <p className="text-[var(--text-primary)] font-medium">
                   {defaultVpa || 'Not set up'}
                 </p>

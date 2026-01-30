@@ -58,7 +58,7 @@ export const QRCodePage = () => {
     if (navigator.share) {
       try {
         await navigator.share({
-          title: 'Pay me via UPI',
+          title: 'Pay me via VPAI',
           text: `Pay ${userName} using UPI ID: ${userVpa}`,
           url: upiUrl,
         });
@@ -333,7 +333,7 @@ const QRScanner = () => {
       // Navigate to send money with pre-filled VPA
       navigate(`/send?vpa=${encodeURIComponent(upiData.vpa)}&name=${encodeURIComponent(upiData.name || '')}`);
     } else {
-      toast.error('Invalid QR code. Not a valid UPI QR.');
+      toast.error('Invalid QR code. Not a valid VPA QR.');
       hasProcessedRef.current = false; // Allow retry for invalid QR
     }
   };

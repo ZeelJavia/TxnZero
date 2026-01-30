@@ -10,7 +10,7 @@ import {
   LogOut,
   Menu,
   X,
-  Wallet,
+  // Wallet,
   Shield,
   Sun,
   Moon,

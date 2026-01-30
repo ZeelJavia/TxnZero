@@ -59,7 +59,7 @@ export const AuthLayout = ({ children, title, subtitle }: AuthLayoutProps) => {
             </motion.div>
           </div>
           <h1 className="text-3xl font-bold gradient-text">LedgerZero</h1>
-          <p className="text-slate-500 mt-1">Secure UPI Payments</p>
+          <p className="text-slate-500 mt-1">Secure Payments</p>
         </motion.div>
 
         {/* Title */}

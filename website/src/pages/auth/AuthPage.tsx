@@ -362,7 +362,7 @@ export const AuthPage = () => {
 
   const getTitle = () => {
     if (authMode === 'select') {
-      return { title: 'Welcome to LedgerZero', subtitle: 'Secure, fast UPI payments' };
+      return { title: 'Welcome to LedgerZero', subtitle: 'Secure, fast payments' };
     }
     
     switch (step) {
@@ -502,7 +502,7 @@ const PhoneStep = ({ phoneNumber, setPhoneNumber, error, isLoading, onSubmit, au
   };
 
   return (
-    <div className="space-y-6">
+    <form onSubmit={(e) => { e.preventDefault(); handleSubmit(); }} className="space-y-6">
       <Input
         label="Mobile Number"
         type="tel"
@@ -526,23 +526,24 @@ const PhoneStep = ({ phoneNumber, setPhoneNumber, error, isLoading, onSubmit, au
       </div>
 
       <Button
+        type="submit"
         fullWidth
         size="lg"
         isLoading={isLoading}
-        onClick={handleSubmit}
         rightIcon={<ArrowRight size={20} />}
       >
         {authMode === 'login' ? 'Continue to Login' : 'Send OTP'}
       </Button>
 
       <button
+        type="button"
         onClick={onBack}
         className="w-full flex items-center justify-center gap-2 text-slate-400 hover:text-white transition-colors"
       >
         <ArrowLeft size={18} />
         <span>Back</span>
       </button>
-    </div>
+    </form>
   );
 };
 
@@ -570,7 +571,7 @@ const OtpStep = ({ phoneNumber, otp, setOtp, error, isLoading, onSubmit, onResen
   });
 
   return (
-    <div className="space-y-6">
+    <form onSubmit={(e) => { e.preventDefault(); if (otp.length === 6) onSubmit(); }} className="space-y-6">
       {isDeviceVerification && (
         <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 mb-4">
           <p className="text-sm text-amber-400 text-center">
@@ -592,10 +593,10 @@ const OtpStep = ({ phoneNumber, otp, setOtp, error, isLoading, onSubmit, onResen
       />
 
       <Button
+        type="submit"
         fullWidth
         size="lg"
         isLoading={isLoading}
-        onClick={onSubmit}
         disabled={otp.length !== 6}
         rightIcon={<CheckCircle2 size={20} />}
       >
@@ -616,6 +617,7 @@ const OtpStep = ({ phoneNumber, otp, setOtp, error, isLoading, onSubmit, onResen
           </p>
         ) : (
           <button
+            type="button"
             onClick={onResend}
             disabled={isLoading}
             className="text-sm text-primary-400 hover:underline disabled:opacity-50"
@@ -626,13 +628,14 @@ const OtpStep = ({ phoneNumber, otp, setOtp, error, isLoading, onSubmit, onResen
       </div>
 
       <button
+        type="button"
         onClick={onBack}
         className="w-full flex items-center justify-center gap-2 text-slate-400 hover:text-white transition-colors"
       >
         <ArrowLeft size={18} />
         <span>Change number</span>
       </button>
-    </div>
+    </form>
   );
 };
 
@@ -656,7 +659,7 @@ const RegisterStep = ({
   error, isLoading, onSubmit, onBack
 }: RegisterStepProps) => {
   return (
-    <div className="space-y-5">
+    <form onSubmit={(e) => { e.preventDefault(); onSubmit(); }} className="space-y-5">
       <Input
         label="Full Name"
         placeholder="Enter your full name"
@@ -687,23 +690,24 @@ const RegisterStep = ({
       />
 
       <Button
+        type="submit"
         fullWidth
         size="lg"
         isLoading={isLoading}
-        onClick={onSubmit}
         rightIcon={<ArrowRight size={20} />}
       >
         Create Account
       </Button>
 
       <button
+        type="button"
         onClick={onBack}
         className="w-full flex items-center justify-center gap-2 text-slate-400 hover:text-white transition-colors"
       >
         <ArrowLeft size={18} />
         <span>Back</span>
       </button>
-    </div>
+    </form>
   );
 };
 
@@ -719,7 +723,7 @@ interface LoginStepProps {
 
 const LoginStep = ({ phoneNumber, password, setPassword, error, isLoading, onSubmit, onBack }: LoginStepProps) => {
   return (
-    <div className="space-y-6">
+    <form onSubmit={(e) => { e.preventDefault(); onSubmit(); }} className="space-y-6">
       {/* Phone number display */}
       <div className="p-4 rounded-xl bg-slate-800/50 border border-slate-700 flex items-center gap-3">
         <div className="w-10 h-10 rounded-lg bg-primary-500/20 flex items-center justify-center">
@@ -750,29 +754,30 @@ const LoginStep = ({ phoneNumber, password, setPassword, error, isLoading, onSub
       </div>
 
       <Button
+        type="submit"
         fullWidth
         size="lg"
         isLoading={isLoading}
-        onClick={onSubmit}
         rightIcon={<LogIn size={20} />}
       >
         Login
       </Button>
 
       <div className="text-center">
-        <button className="text-sm text-primary-400 hover:underline">
+        <button type="button" className="text-sm text-primary-400 hover:underline">
           Forgot Password?
         </button>
       </div>
 
       <button
+        type="button"
         onClick={onBack}
         className="w-full flex items-center justify-center gap-2 text-slate-400 hover:text-white transition-colors"
       >
         <ArrowLeft size={18} />
         <span>Change number</span>
       </button>
-    </div>
+    </form>
   );
 };
 

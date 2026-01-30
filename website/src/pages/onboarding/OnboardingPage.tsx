@@ -312,7 +312,7 @@ const WelcomeStep = ({ userName, isLoading, onGetStarted, onSkip }: WelcomeStepP
           Welcome, {userName}! 🎉
         </h1>
         <p className="text-slate-400 text-lg">
-          Let's set up your account to start making instant UPI payments
+          Let's set up your account to start making instant payments
         </p>
       </div>
 
@@ -320,7 +320,7 @@ const WelcomeStep = ({ userName, isLoading, onGetStarted, onSkip }: WelcomeStepP
       <div className="space-y-4 text-left">
         {[
           { icon: Building2, text: 'Link your bank account' },
-          { icon: CreditCard, text: 'Get your unique UPI ID' },
+          { icon: CreditCard, text: 'Get your unique VPA' },
           { icon: Shield, text: 'Secure & instant transfers' },
         ].map((feature, idx) => (
           <motion.div
@@ -533,7 +533,7 @@ const SetMpinStep = ({
 
       {/* VPA Display */}
       <div className="glass rounded-xl p-4 text-center">
-        <p className="text-xs text-slate-500 mb-1">Your UPI ID</p>
+        <p className="text-xs text-slate-500 mb-1">Your VPA</p>
         <p className="text-lg font-semibold gradient-text">{vpa}</p>
       </div>
 
@@ -678,7 +678,7 @@ const SuccessStep = ({ vpa, bankName, onComplete }: SuccessStepProps) => {
         transition={{ delay: 0.4 }}
         className="glass rounded-2xl p-6 space-y-2"
       >
-        <p className="text-sm text-slate-400">Your UPI ID</p>
+        <p className="text-sm text-slate-400">Your VPA</p>
         <p className="text-2xl font-bold gradient-text">{vpa}</p>
         <p className="text-xs text-slate-500">Share this ID to receive money</p>
       </motion.div>
