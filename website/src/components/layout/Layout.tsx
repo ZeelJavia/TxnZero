@@ -126,8 +126,8 @@ export const Layout = () => {
             <div className="flex items-center justify-between h-16">
               {/* Logo */}
               <Link to="/dashboard" className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[var(--color-primary-500)] to-[var(--color-accent-500)] flex items-center justify-center shadow-lg shadow-[var(--color-primary-500)]/20">
-                  <span className="text-lg font-bold text-white">L0</span>
+                <div className="w-10 h-10 rounded-xl overflow-hidden shadow-lg shadow-[var(--color-primary-500)]/20">
+                  <img src="/logo.png" alt="LedgerZero" className="w-full h-full object-contain" />
                 </div>
                 <span className="text-xl font-bold gradient-text hidden sm:block">
                   LedgerZero

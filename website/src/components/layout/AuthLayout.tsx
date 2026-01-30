@@ -53,9 +53,9 @@ export const AuthLayout = ({ children, title, subtitle }: AuthLayoutProps) => {
           <div className="inline-flex items-center gap-3 mb-4">
             <motion.div
               whileHover={{ rotate: 10 }}
-              className="w-14 h-14 rounded-2xl bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center shadow-lg shadow-primary-500/25"
+              className="w-16 h-16 rounded-2xl overflow-hidden shadow-lg shadow-primary-500/25"
             >
-              <span className="text-2xl font-bold text-white">L0</span>
+              <img src="/logo.png" alt="LedgerZero" className="w-full h-full object-contain" />
             </motion.div>
           </div>
           <h1 className="text-3xl font-bold gradient-text">LedgerZero</h1>

@@ -86,9 +86,9 @@ export const PageLoader = () => {
             repeat: Infinity,
             ease: 'easeInOut',
           }}
-          className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center"
+          className="w-16 h-16 rounded-2xl overflow-hidden"
         >
-          <span className="text-2xl font-bold text-white">L0</span>
+          <img src="/logo.png" alt="LedgerZero" className="w-full h-full object-contain" />
         </motion.div>
 
         {/* Loading Text */}
